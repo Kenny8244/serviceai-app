@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { Button } from './ui/button'
+import { getDesktopSidebarCollapsed, setDesktopSidebarCollapsed } from '../lib/sidebarStorage'
 
 const DESKTOP_QUERY = '(min-width: 1024px)'
 
@@ -12,21 +13,31 @@ function isDesktopViewport() {
 
 export function AppLayout() {
   const location = useLocation()
-  const [sidebarOpen, setSidebarOpen] = useState(() =>
+  const [isDesktop, setIsDesktop] = useState(() =>
     typeof window === 'undefined' ? true : isDesktopViewport()
   )
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [desktopCollapsed, setDesktopCollapsed] = useState(() =>
+    typeof window === 'undefined' ? false : getDesktopSidebarCollapsed()
+  )
+
+  const persistCollapsed = (collapsed: boolean) => {
+    setDesktopCollapsed(collapsed)
+    setDesktopSidebarCollapsed(collapsed)
+  }
 
   useEffect(() => {
-    if (!isDesktopViewport()) {
-      setSidebarOpen(false)
-    }
+    setMobileOpen(false)
   }, [location.pathname])
 
   useEffect(() => {
     const media = window.matchMedia(DESKTOP_QUERY)
 
     const onChange = () => {
-      setSidebarOpen(media.matches)
+      setIsDesktop(media.matches)
+      if (!media.matches) {
+        setMobileOpen(false)
+      }
     }
 
     media.addEventListener('change', onChange)
@@ -34,38 +45,44 @@ export function AppLayout() {
   }, [])
 
   useEffect(() => {
-    if (!sidebarOpen) return
-
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setSidebarOpen(false)
+      if (event.key !== 'Escape') return
+
+      if (!isDesktopViewport()) {
+        setMobileOpen(false)
+        return
       }
+
+      persistCollapsed(true)
     }
 
     window.addEventListener('keydown', onKeyDown)
-
-    if (!isDesktopViewport()) {
-      const previousOverflow = document.body.style.overflow
-      document.body.style.overflow = 'hidden'
-      return () => {
-        document.body.style.overflow = previousOverflow
-        window.removeEventListener('keydown', onKeyDown)
-      }
-    }
-
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [sidebarOpen])
+  }, [])
+
+  useEffect(() => {
+    if (isDesktop || !mobileOpen) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isDesktop, mobileOpen])
+
+  const sidebarVisible = isDesktop || mobileOpen
+  const sidebarCollapsed = isDesktop && desktopCollapsed
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      {!sidebarOpen && (
+      {!isDesktop && !mobileOpen && (
         <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
           <Button
             variant="ghost"
             size="sm"
             className="p-2"
             aria-label="Open navigation"
-            onClick={() => setSidebarOpen(true)}
+            onClick={() => setMobileOpen(true)}
           >
             <Menu className="h-5 w-5" />
           </Button>
@@ -73,24 +90,35 @@ export function AppLayout() {
         </div>
       )}
 
-      {sidebarOpen && (
+      {mobileOpen && !isDesktop && (
         <button
           type="button"
           className="fixed inset-0 z-40 bg-black/40 lg:hidden"
           aria-label="Close navigation"
-          onClick={() => setSidebarOpen(false)}
+          onClick={() => setMobileOpen(false)}
         />
       )}
 
       <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 lg:w-72 transform transition-transform duration-200 overflow-y-auto ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'
+        className={`fixed inset-y-0 left-0 z-50 transform transition-all duration-200 ${
+          sidebarCollapsed ? 'w-16' : 'w-64 lg:w-72'
+        } ${
+          sidebarVisible ? 'translate-x-0' : '-translate-x-full pointer-events-none'
         }`}
       >
-        <Sidebar onClose={() => setSidebarOpen(false)} />
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          isDesktop={isDesktop}
+          onClose={() => setMobileOpen(false)}
+          onToggleCollapsed={() => persistCollapsed(!desktopCollapsed)}
+        />
       </div>
 
-      <div className={`transition-[margin] duration-200 ${sidebarOpen ? 'lg:ml-64 xl:ml-72' : ''}`}>
+      <div
+        className={`transition-[margin] duration-200 ${
+          isDesktop ? (desktopCollapsed ? 'lg:ml-16' : 'lg:ml-72') : ''
+        }`}
+      >
         <Outlet />
       </div>
     </div>

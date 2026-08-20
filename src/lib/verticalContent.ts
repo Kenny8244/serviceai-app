@@ -6,6 +6,7 @@ export interface VerticalContent {
   icon: string
   description: string
   addAssetLabel: string
+  navAssetsLabel: string
   serviceRequestLabel: string
 }
 
@@ -16,6 +17,7 @@ export const VERTICAL_CONTENT: Record<VerticalId, VerticalContent> = {
     icon: '🛍️',
     description: 'Products, inventory, and store operations',
     addAssetLabel: 'Add Product / Asset',
+    navAssetsLabel: 'Products',
     serviceRequestLabel: 'Create Retail Service Request',
   },
   restaurant: {
@@ -24,6 +26,7 @@ export const VERTICAL_CONTENT: Record<VerticalId, VerticalContent> = {
     icon: '🍽️',
     description: 'Ingredients, equipment, and kitchen operations',
     addAssetLabel: 'Add Ingredient / Equipment',
+    navAssetsLabel: 'Inventory',
     serviceRequestLabel: 'Create Restaurant Service Request',
   },
   'store-market': {
@@ -32,6 +35,7 @@ export const VERTICAL_CONTENT: Record<VerticalId, VerticalContent> = {
     icon: '🛒',
     description: 'Vendors, listings, and marketplace operations',
     addAssetLabel: 'Add Listing / Asset',
+    navAssetsLabel: 'Listings',
     serviceRequestLabel: 'Create Marketplace Service Request',
   },
   business: {
@@ -40,6 +44,7 @@ export const VERTICAL_CONTENT: Record<VerticalId, VerticalContent> = {
     icon: '🏢',
     description: 'Departments, assets, and organization operations',
     addAssetLabel: 'Add Enterprise Asset',
+    navAssetsLabel: 'Assets',
     serviceRequestLabel: 'Create Enterprise Service Request',
   },
 }

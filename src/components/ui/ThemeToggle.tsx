@@ -4,9 +4,11 @@ import { useTheme, type Theme } from '../../lib/theme'
 
 interface ThemeToggleProps {
   className?: string
+  compact?: boolean
+  quiet?: boolean
 }
 
-export function ThemeToggle({ className }: ThemeToggleProps) {
+export function ThemeToggle({ className, compact = false, quiet = false }: ThemeToggleProps) {
   const { theme, toggleTheme } = useTheme()
 
   const getThemeIcon = (currentTheme: Theme) => {
@@ -20,27 +22,33 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
     }
   }
 
-  const getThemeLabel = (currentTheme: Theme) => {
+  const getThemeLabel = (currentTheme: Theme, short: boolean) => {
     switch (currentTheme) {
       case 'light':
-        return 'Light Mode'
+        return short ? 'Light' : 'Light Mode'
       case 'dark':
-        return 'Dark Mode'
+        return short ? 'Dark' : 'Dark Mode'
       case 'auto':
-        return 'Auto Mode'
+        return short ? 'Auto' : 'Auto Mode'
     }
   }
 
+  const label = getThemeLabel(theme, quiet)
+  const fullLabel = getThemeLabel(theme, false)
+
   return (
     <Button
-      variant="outline"
+      variant={quiet || compact ? 'ghost' : 'outline'}
       size="sm"
       onClick={toggleTheme}
-      className={`flex items-center gap-2 ${className}`}
-      title={getThemeLabel(theme)}
+      className={`flex items-center shrink-0 ${
+        compact ? 'h-9 w-9 px-0' : quiet ? 'h-8 gap-1.5 px-2 text-xs' : 'gap-2'
+      } ${className ?? ''}`}
+      aria-label={fullLabel}
+      title={compact ? undefined : fullLabel}
     >
       {getThemeIcon(theme)}
-      <span className="hidden sm:inline">{getThemeLabel(theme)}</span>
+      {!compact && <span className={quiet ? 'whitespace-nowrap' : 'hidden sm:inline'}>{label}</span>}
     </Button>
   )
 }
