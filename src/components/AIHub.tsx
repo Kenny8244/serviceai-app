@@ -189,7 +189,7 @@ export function AIHub({ className = "" }: AIHubProps) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => navigate('/settings')}
+                onClick={() => navigate('/settings?section=ai')}
               >
                 <Settings className="h-4 w-4 mr-2" />
                 AI Settings

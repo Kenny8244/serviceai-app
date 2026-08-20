@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, Plus } from 'lucide-react';
+import { Search, Plus, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -33,7 +32,6 @@ interface Category {
 const AssetsPage: React.FC = () => {
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const navigate = useNavigate();
 
   // Mock data - replace with API calls
   const categories: Category[] = [
@@ -131,7 +129,7 @@ const AssetsPage: React.FC = () => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Button>
+              <Button disabled title="Coming soon">
                 <Plus className="mr-2 h-4 w-4" />
                 Create Object
               </Button>

@@ -2,6 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { CheckCircle, ArrowRight, Sparkles } from 'lucide-react'
+import { getSelectedVertical } from '../lib/verticalStorage'
 
 interface OnboardingConfirmationProps {
   onComplete?: () => void
@@ -11,8 +12,9 @@ export function OnboardingConfirmation({ onComplete }: OnboardingConfirmationPro
   const navigate = useNavigate()
   const location = useLocation()
 
-  // Get the selected vertical from navigation state or default to retail
-  const selectedVertical = location.state?.verticalId || 'retail'
+  const selectedVertical = getSelectedVertical(
+    (location.state as { verticalId?: string } | null)?.verticalId
+  )
 
   const verticals = {
     retail: {

@@ -1,9 +1,11 @@
-import { Response, NextFunction } from 'express';
+import { Response, NextFunction, RequestHandler } from 'express';
 import { verifyToken } from '../utils/jwt';
 import { findUserById } from '../utils/database';
 import { AuthenticatedRequest, JWTPayload } from '../types';
 
-export const authenticateToken = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+export type { AuthenticatedRequest };
+
+export const authenticateToken: RequestHandler = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 

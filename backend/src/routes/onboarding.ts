@@ -12,6 +12,7 @@ declare global {
       user?: {
         id: string
         email: string
+        organizationId?: string
       }
     }
   }

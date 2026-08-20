@@ -1,9 +1,11 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Badge } from './ui/badge'
 import { ThemeToggle } from './ui/ThemeToggle'
+import { getSelectedVertical } from '../lib/verticalStorage'
+import { getVerticalDisplayName } from '../lib/verticalContent'
 import {
   Settings as SettingsIcon,
   Bot,
@@ -31,9 +33,17 @@ interface SettingsSection {
   content: React.ReactNode
 }
 
+const SETTINGS_SECTIONS = ['general', 'ai', 'dashboard', 'assets', 'team', 'integrations'] as const
+
 export function Settings() {
   const navigate = useNavigate()
-  const [activeSection, setActiveSection] = useState('general')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const sectionFromUrl = searchParams.get('section')
+  const [activeSection, setActiveSection] = useState(
+    sectionFromUrl && SETTINGS_SECTIONS.includes(sectionFromUrl as (typeof SETTINGS_SECTIONS)[number])
+      ? sectionFromUrl
+      : 'general'
+  )
   const [settings, setSettings] = useState({
     // General Settings
     companyName: 'Your Business',
@@ -66,6 +76,22 @@ export function Settings() {
     requireApproval: true,
     maxTeamSize: 50
   })
+
+  useEffect(() => {
+    const section = searchParams.get('section')
+    if (section && SETTINGS_SECTIONS.includes(section as (typeof SETTINGS_SECTIONS)[number])) {
+      setActiveSection(section)
+    }
+  }, [searchParams])
+
+  const selectSection = (sectionId: string) => {
+    setActiveSection(sectionId)
+    if (sectionId === 'general') {
+      setSearchParams({}, { replace: true })
+    } else {
+      setSearchParams({ section: sectionId }, { replace: true })
+    }
+  }
 
   const handleSave = () => {
     // TODO: Save settings to backend/localStorage
@@ -124,6 +150,18 @@ export function Settings() {
                 <option value="America/Los_Angeles">Pacific Time</option>
               </select>
             </div>
+          </div>
+
+          <div className="flex items-center justify-between p-4 border border-slate-200 dark:border-slate-700 rounded-lg">
+            <div>
+              <h4 className="font-medium text-slate-900 dark:text-slate-100">Active vertical</h4>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Current workspace: {getVerticalDisplayName(getSelectedVertical())}
+              </p>
+            </div>
+            <Button variant="outline" disabled title="Coming soon">
+              Change Vertical
+            </Button>
           </div>
 
           {/* Theme & Appearance */}
@@ -648,7 +686,7 @@ export function Settings() {
                   {sections.map((section) => (
                     <button
                       key={section.id}
-                      onClick={() => setActiveSection(section.id)}
+                      onClick={() => selectSection(section.id)}
                       className={`
                         w-full flex items-center space-x-3 px-3 py-2 text-left rounded-md transition-colors
                         ${activeSection === section.id

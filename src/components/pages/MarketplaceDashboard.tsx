@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom"
 import { Button } from "../ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card"
 import { Store, TrendingUp, Users, DollarSign, Package, BarChart3, Settings, LogOut } from "lucide-react"
@@ -5,6 +6,7 @@ import { BackButton } from "../ui/BackButton"
 import { AIAssistant } from "../ui/AIAssistant"
 
 export function MarketplaceDashboard() {
+  const navigate = useNavigate()
   return (
     <div className="min-h-screen bg-background grid-pattern">
       {/* Header */}
@@ -24,11 +26,11 @@ export function MarketplaceDashboard() {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <Button variant="outline" size="sm" className="backdrop-blur-glass">
+              <Button variant="outline" size="sm" className="backdrop-blur-glass" onClick={() => navigate('/settings')}>
                 <Settings className="h-4 w-4 mr-2" />
                 Settings
               </Button>
-              <Button variant="outline" size="sm" className="backdrop-blur-glass">
+              <Button variant="outline" size="sm" className="backdrop-blur-glass" onClick={() => navigate('/auth')}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Logout
               </Button>

@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom"
 import { Button } from "../ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card"
 import { Building2, Users, Workflow, Shield, BarChart3, Settings, LogOut, Zap } from "lucide-react"
@@ -5,6 +6,7 @@ import { BackButton } from "../ui/BackButton"
 import { AIAssistant } from "../ui/AIAssistant"
 
 export function EnterpriseDashboard() {
+  const navigate = useNavigate()
   return (
     <div className="min-h-screen bg-background grid-pattern">
       {/* Header */}
@@ -12,7 +14,7 @@ export function EnterpriseDashboard() {
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <BackButton to="/enterprise" className="mr-4 text-muted-foreground hover:text-foreground" />
+              <BackButton to="/vertical-selection" className="mr-4 text-muted-foreground hover:text-foreground" />
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl flex items-center justify-center">
                   <Building2 className="h-6 w-6 text-white" />
@@ -24,11 +26,11 @@ export function EnterpriseDashboard() {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <Button variant="outline" size="sm" className="backdrop-blur-glass">
+              <Button variant="outline" size="sm" className="backdrop-blur-glass" onClick={() => navigate('/settings')}>
                 <Settings className="h-4 w-4 mr-2" />
                 Settings
               </Button>
-              <Button variant="outline" size="sm" className="backdrop-blur-glass">
+              <Button variant="outline" size="sm" className="backdrop-blur-glass" onClick={() => navigate('/auth')}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Logout
               </Button>

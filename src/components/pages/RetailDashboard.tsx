@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import { Button } from "../ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card"
 import { ShoppingBag, TrendingUp, Users, Package, DollarSign, BarChart3, Settings, LogOut, MessageCircle, AlertCircle, Plus, FileText, Search } from "lucide-react"
@@ -36,6 +37,7 @@ interface DashboardStats {
 }
 
 export function RetailDashboard() {
+  const navigate = useNavigate()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -179,11 +181,11 @@ export function RetailDashboard() {
                 <MessageCircle className="h-4 w-4 mr-2" />
                 AI Help
               </Button>
-              <Button variant="outline" size="sm" className="backdrop-blur-glass">
+              <Button variant="outline" size="sm" className="backdrop-blur-glass" onClick={() => navigate('/settings')}>
                 <Settings className="h-4 w-4 mr-2" />
                 Settings
               </Button>
-              <Button variant="outline" size="sm" className="backdrop-blur-glass">
+              <Button variant="outline" size="sm" className="backdrop-blur-glass" onClick={() => navigate('/auth')}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Logout
               </Button>
