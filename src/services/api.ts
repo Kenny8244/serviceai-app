@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = '/api';
 
 export interface User {
   id: string;
@@ -103,11 +103,41 @@ export interface CreateServiceRequest {
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   attachments?: string[];
 }
+
+export type DashboardStatIconKey =
+  | 'package'
+  | 'users'
+  | 'trending-up'
+  | 'alert-triangle'
+  | 'wrench'
+  | 'store'
+  | 'building-2'
+
+export interface DashboardStat {
+  label: string
+  value: string
+  iconKey: DashboardStatIconKey | string
+}
+
+export interface DashboardActivity {
+  title: string
+  detail: string
+}
+
+export interface DashboardOverview {
+  stats: DashboardStat[]
+  activities: DashboardActivity[]
+  aiRecommendation: {
+    title: string
+    detail: string
+  }
+}
+
 class ApiService {
-  private getAuthHeaders(): HeadersInit {
+  private getAuthHeaders(jsonBody = false): HeadersInit {
     const token = localStorage.getItem('authToken');
     return {
-      'Content-Type': 'application/json',
+      ...(jsonBody ? { 'Content-Type': 'application/json' } : {}),
       ...(token && { Authorization: `Bearer ${token}` }),
     };
   }
@@ -159,7 +189,7 @@ class ApiService {
   async selectVertical(verticalId: string): Promise<any> {
     const response = await fetch(`${API_BASE_URL}/verticals/select`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify({ verticalId }),
     });
     return this.handleResponse(response);
@@ -177,7 +207,7 @@ class ApiService {
   async createServiceRequest(serviceRequest: CreateServiceRequest): Promise<{ serviceRequest: ServiceRequest }> {
     const response = await fetch(`${API_BASE_URL}/service-requests`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(serviceRequest),
     });
     return this.handleResponse<{ serviceRequest: ServiceRequest }>(response);
@@ -192,12 +222,13 @@ class ApiService {
   }
 
   // Dashboard endpoints
-  async getDashboardOverview() {
-    const response = await fetch(`${API_BASE_URL}/dashboard/overview`, {
+  async getDashboardOverview(verticalId: string): Promise<DashboardOverview> {
+    const params = new URLSearchParams({ verticalId });
+    const response = await fetch(`${API_BASE_URL}/dashboard/overview?${params.toString()}`, {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
-    return this.handleResponse(response);
+    return this.handleResponse<DashboardOverview>(response);
   }
 
   async getDashboardMetrics() {
@@ -243,7 +274,7 @@ class ApiService {
   async queryAIAssistant(query: string) {
     const response = await fetch(`${API_BASE_URL}/assistant/query`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify({ query }),
     });
     return this.handleResponse(response);
@@ -274,7 +305,7 @@ class ApiService {
   }) {
     const response = await fetch(`${API_BASE_URL}/team`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(memberData),
     });
     return this.handleResponse(response);
@@ -283,7 +314,7 @@ class ApiService {
   async updateTeamMember(memberId: string, updates: any) {
     const response = await fetch(`${API_BASE_URL}/team/${memberId}`, {
       method: 'PUT',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(updates),
     });
     return this.handleResponse(response);
@@ -300,7 +331,7 @@ class ApiService {
   async updateTeamMemberWorkload(memberId: string, workload: number) {
     const response = await fetch(`${API_BASE_URL}/team/${memberId}/workload`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify({ workload }),
     });
     return this.handleResponse(response);
@@ -364,7 +395,7 @@ class ApiService {
   }) {
     const response = await fetch(`${API_BASE_URL}/ai-hub/workflows`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(workflowData),
     });
     return this.handleResponse(response);
@@ -373,7 +404,7 @@ class ApiService {
   async updateAIWorkflow(workflowId: string, updates: any) {
     const response = await fetch(`${API_BASE_URL}/ai-hub/workflows/${workflowId}`, {
       method: 'PUT',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(updates),
     });
     return this.handleResponse(response);
@@ -402,7 +433,7 @@ class ApiService {
   }) {
     const response = await fetch(`${API_BASE_URL}/ai-hub/forms`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(formData),
     });
     return this.handleResponse(response);
@@ -411,7 +442,7 @@ class ApiService {
   async generateAIContent(type: string, prompt: string) {
     const response = await fetch(`${API_BASE_URL}/ai-hub/generate`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify({ type, prompt }),
     });
     return this.handleResponse(response);
@@ -454,7 +485,7 @@ class ApiService {
   async createAsset(assetData: any) {
     const response = await fetch(`${API_BASE_URL}/assets`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(assetData),
     });
     return this.handleResponse(response);
@@ -463,7 +494,7 @@ class ApiService {
   async updateAsset(assetId: string, updates: any) {
     const response = await fetch(`${API_BASE_URL}/assets/${assetId}`, {
       method: 'PUT',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(updates),
     });
     return this.handleResponse(response);
@@ -488,7 +519,7 @@ class ApiService {
   async createInventoryTransaction(assetId: string, transactionData: any) {
     const response = await fetch(`${API_BASE_URL}/assets/${assetId}/transactions`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(transactionData),
     });
     return this.handleResponse(response);
@@ -506,7 +537,7 @@ class ApiService {
   async updateSystemSettings(settings: any) {
     const response = await fetch(`${API_BASE_URL}/settings`, {
       method: 'PUT',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(settings),
     });
     return this.handleResponse(response);
@@ -523,7 +554,7 @@ class ApiService {
   async updateOrganizationDetails(orgData: any) {
     const response = await fetch(`${API_BASE_URL}/settings/organization`, {
       method: 'PUT',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(orgData),
     });
     return this.handleResponse(response);
@@ -540,7 +571,7 @@ class ApiService {
   async updateAIConfiguration(config: any) {
     const response = await fetch(`${API_BASE_URL}/settings/ai-config`, {
       method: 'PUT',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(config),
     });
     return this.handleResponse(response);
@@ -557,7 +588,7 @@ class ApiService {
   async createIntegration(integrationData: any) {
     const response = await fetch(`${API_BASE_URL}/settings/integrations`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(integrationData),
     });
     return this.handleResponse(response);

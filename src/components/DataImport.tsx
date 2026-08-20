@@ -192,42 +192,59 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center">
+        <CardTitle className="text-lg flex items-center text-slate-900 dark:text-slate-100">
           <Upload className="h-5 w-5 mr-2" />
           Import Your Data
         </CardTitle>
-        <CardDescription>
+        <CardDescription className="text-slate-600 dark:text-slate-400">
           Upload a CSV file or connect to Google Sheets to import your {vertical === 'retail' ? 'products' : vertical === 'restaurant' ? 'menu items' : 'inventory items'}
         </CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-6">
-        {/* Import Method Selection */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-          <Button
-            variant={importMethod === 'csv' ? 'default' : 'outline'}
+        <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+          <button
+            type="button"
             onClick={() => setImportMethod('csv')}
-            className="flex-1"
+            className={`
+              flex items-center justify-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all flex-1
+              ${importMethod === 'csv'
+                ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+              }
+            `}
           >
-            <Upload className="h-4 w-4 mr-2" />
-            CSV Upload
-          </Button>
-          <Button
-            variant={importMethod === 'sheets' ? 'default' : 'outline'}
+            <Upload className="h-4 w-4" />
+            <span>CSV Upload</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setImportMethod('sheets')}
-            className="flex-1"
+            className={`
+              flex items-center justify-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all flex-1
+              ${importMethod === 'sheets'
+                ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+              }
+            `}
           >
-            <Sheet className="h-4 w-4 mr-2" />
-            Google Sheets
-          </Button>
-          <Button
-            variant={importMethod === 'manual' ? 'default' : 'outline'}
+            <Sheet className="h-4 w-4" />
+            <span>Google Sheets</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setImportMethod('manual')}
-            className="flex-1"
+            className={`
+              flex items-center justify-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all flex-1
+              ${importMethod === 'manual'
+                ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+              }
+            `}
           >
-            <Edit3 className="h-4 w-4 mr-2" />
-            Manual Entry
-          </Button>
+            <Edit3 className="h-4 w-4" />
+            <span>Manual Entry</span>
+          </button>
         </div>
 
         {/* CSV Upload Section */}
@@ -277,7 +294,7 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
                       or click to browse
                     </p>
                   </div>
-                  <Button onClick={handleUploadClick}>
+                  <Button onClick={handleUploadClick} className="bg-blue-500 hover:bg-blue-600 text-white">
                     Select CSV File
                   </Button>
                 </div>
@@ -314,7 +331,7 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
                 <p className="text-slate-600 dark:text-slate-400 mb-4">
                   Connect your Google Sheets to import data directly
                 </p>
-                <Button onClick={handleGoogleSignIn} disabled={sheetsLoading}>
+                <Button onClick={handleGoogleSignIn} disabled={sheetsLoading} className="bg-blue-500 hover:bg-blue-600 text-white">
                   {sheetsLoading ? 'Connecting...' : 'Connect Google Sheets'}
                 </Button>
               </div>
