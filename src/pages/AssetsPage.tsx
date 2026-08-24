@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+import { PageShell } from '@/components/layout/PageShell';
 
 interface Asset {
   id: string;
@@ -82,13 +82,20 @@ const AssetsPage: React.FC = () => {
       case 'DAMAGED':
         return 'destructive';
       case 'MAINTENANCE':
-        return 'warning';
+        return 'secondary';
       case 'LOST':
         return 'outline';
       default:
         return 'secondary';
     }
   };
+
+  const filteredAssets = assets.filter((asset) => {
+    const query = searchQuery.trim().toLowerCase()
+    if (!query) return true
+    return [asset.id, asset.name, asset.model, asset.manufacturer, asset.serialNumber]
+      .some((value) => value.toLowerCase().includes(query))
+  })
 
   const renderCategoryTree = (category: Category, level = 0) => (
     <div key={category.id} className="mb-1">
@@ -103,7 +110,29 @@ const AssetsPage: React.FC = () => {
   );
 
   return (
-    <div className="flex h-screen bg-slate-50 dark:bg-slate-900">
+    <PageShell
+      flush
+      title="Objects"
+      actions={
+        <>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+            <Input
+              type="search"
+              placeholder="Search assets..."
+              className="pl-8 w-[300px]"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <Button disabled title="Coming soon">
+            <Plus className="mr-2 h-4 w-4" />
+            Create Object
+          </Button>
+        </>
+      }
+    >
+    <div className="flex flex-1 min-h-0 bg-slate-50 dark:bg-slate-900">
       {/* Schema Tree Sidebar */}
       <div className="w-64 border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 overflow-y-auto">
         <h2 className="font-semibold text-lg mb-4">Schema Tree</h2>
@@ -114,34 +143,16 @@ const AssetsPage: React.FC = () => {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Search and Create Bar */}
-        <div className="p-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-semibold">Objects</h1>
-            <div className="flex items-center space-x-2">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-                <Input
-                  type="search"
-                  placeholder="Search assets..."
-                  className="pl-8 w-[300px]"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <Button disabled title="Coming soon">
-                <Plus className="mr-2 h-4 w-4" />
-                Create Object
-              </Button>
-            </div>
-          </div>
-        </div>
-
         <div className="flex flex-1 overflow-hidden">
           {/* Asset List */}
           <div className="w-1/3 border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-y-auto">
             <div className="p-2 space-y-1">
-              {assets.map((asset) => (
+              {filteredAssets.length === 0 ? (
+                <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
+                  No assets match this search.
+                </div>
+              ) : (
+                filteredAssets.map((asset) => (
                 <div
                   key={asset.id}
                   className={`p-3 rounded cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 ${
@@ -157,7 +168,8 @@ const AssetsPage: React.FC = () => {
                   </div>
                   <p className="text-sm text-slate-500 dark:text-slate-400">{asset.model}</p>
                 </div>
-              ))}
+              ))
+              )}
             </div>
           </div>
 
@@ -245,6 +257,7 @@ const AssetsPage: React.FC = () => {
         </div>
       </div>
     </div>
+    </PageShell>
   );
 };
 

@@ -1,14 +1,16 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { PageShell } from '@/components/layout/PageShell'
+import { PageTabs } from '@/components/layout/PageTabs'
+import { GradientIcon } from '@/components/layout/GradientIcon'
 import {
   Activity,
   Target,
   Users,
   Brain,
-  ArrowLeft,
   BarChart3,
   Bot,
   Sparkles,
@@ -38,75 +40,28 @@ export function Analytics() {
   ]
 
   return (
-    <div>
-      {/* Header */}
-      <div className="bg-card border-b border-border -mx-6 px-6">
-        <div className="container mx-auto py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate('/dashboard')}
-                className="flex items-center space-x-2"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span>Back to Dashboard</span>
-              </Button>
-              <div className="w-px h-6 bg-slate-300 dark:bg-slate-600"></div>
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                  <BarChart3 className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-foreground">
-                    Analytics Dashboard
-                  </h1>
-                  <p className="text-sm text-muted-foreground">
-                    Comprehensive insights and performance metrics
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-3">
-              <Badge variant="secondary" className="bg-green-100 text-green-800">
-                <Sparkles className="h-3 w-3 mr-1" />
-                AI-Powered
-              </Badge>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate('/ai-hub')}
-              >
-                <Bot className="h-4 w-4 mr-2" />
-                AI Hub
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="container mx-auto py-8">
-        {/* Tab Navigation */}
-        <div className="flex space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg mb-8">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`
-                flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all flex-1
-                ${activeTab === tab.id
-                  ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                }
-              `}
-            >
-              {tab.icon}
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </div>
+    <PageShell
+      title="Analytics Dashboard"
+      subtitle="Comprehensive insights and performance metrics"
+      icon={<GradientIcon icon={BarChart3} />}
+      actions={
+        <>
+          <Badge variant="secondary" className="bg-green-100 text-green-800">
+            <Sparkles className="h-3 w-3 mr-1" />
+            AI-Powered
+          </Badge>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/ai-hub')}
+          >
+            <Bot className="h-4 w-4 mr-2" />
+            AI Hub
+          </Button>
+        </>
+      }
+    >
+        <PageTabs tabs={tabs} value={activeTab} onChange={setActiveTab} />
 
         {/* Tab Content */}
         <div className="min-h-[600px]">
@@ -544,7 +499,6 @@ export function Analytics() {
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </PageShell>
   )
 }

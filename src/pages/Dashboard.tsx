@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { PageShell } from '@/components/layout/PageShell'
+import { GradientIcon } from '@/components/layout/GradientIcon'
 import { DataImport } from '@/components/import/DataImport'
 import { getSelectedVertical } from '@/lib/verticalStorage'
 import { getVerticalContent } from '@/lib/verticalContent'
@@ -108,43 +110,27 @@ export function Dashboard() {
   }, [loadOverview])
 
   return (
-    <div>
-      <div className="bg-card border-b border-border -mx-6 px-6">
-        <div className="container mx-auto py-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center space-x-3 min-w-0">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
-                <VerticalIcon className="h-6 w-6 text-white" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-2xl font-bold text-foreground">
-                  {vertical.name} Dashboard
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  {vertical.description}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center flex-wrap gap-3">
-              <Badge variant="secondary" className="bg-green-100 text-green-800">
-                <Sparkles className="h-3 w-3 mr-1" />
-                ServiceAI Active
-              </Badge>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate('/analytics')}
-              >
-                <BarChart3 className="h-4 w-4 mr-2" />
-                View Analytics
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="container mx-auto py-8">
+    <PageShell
+      title={`${vertical.name} Dashboard`}
+      subtitle={vertical.description}
+      icon={<GradientIcon icon={VerticalIcon} />}
+      actions={
+        <>
+          <Badge variant="secondary" className="bg-green-100 text-green-800">
+            <Sparkles className="h-3 w-3 mr-1" />
+            ServiceAI Active
+          </Badge>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/analytics')}
+          >
+            <BarChart3 className="h-4 w-4 mr-2" />
+            View Analytics
+          </Button>
+        </>
+      }
+    >
         <div className="flex flex-col sm:flex-row flex-wrap gap-2 mb-8">
           <Button variant="outline" size="sm" onClick={() => navigate('/assets')}>
             <Package className="h-4 w-4 mr-2 shrink-0 block" />
@@ -286,7 +272,6 @@ export function Dashboard() {
             console.log('Data imported:', data)
           }}
         />
-      </div>
-    </div>
+    </PageShell>
   )
 }

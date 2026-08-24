@@ -5,6 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { PageShell } from '@/components/layout/PageShell'
+import { PageTabs } from '@/components/layout/PageTabs'
+import { GradientIcon } from '@/components/layout/GradientIcon'
 import { apiService } from '@/services/api'
 import type { TeamMember, ServiceTicket } from '@/services/api'
 import {
@@ -12,7 +15,6 @@ import {
   UserPlus,
   Settings,
   Activity,
-  ArrowLeft,
   Search,
   Filter,
   Edit3,
@@ -192,110 +194,73 @@ export function TeamManagement() {
     member.email.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
+  const teamHeader = {
+    title: 'Team Management',
+    subtitle: 'Manage your team, permissions, and collaboration',
+    icon: <GradientIcon icon={Users} from="from-green-500" to="to-blue-600" />,
+    actions: (
+      <>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => navigate('/settings?section=team')}
+        >
+          <Settings className="h-4 w-4 mr-2" />
+          Team Settings
+        </Button>
+        <Button>
+          <UserPlus className="h-4 w-4 mr-2" />
+          Invite Member
+        </Button>
+      </>
+    ),
+  }
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading team data...</p>
+      <PageShell {...teamHeader}>
+        <div className="flex items-center justify-center py-24">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading team data...</p>
+          </div>
         </div>
-      </div>
+      </PageShell>
     )
   }
 
   if (error && teamMembers.length === 0) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <Card className="w-full max-w-md">
-          <CardContent className="p-6 text-center">
-            <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-foreground mb-2">Error Loading Data</h3>
-            <p className="text-muted-foreground mb-4">{error}</p>
-            <Button onClick={() => window.location.reload()}>
-              Retry
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      <PageShell {...teamHeader}>
+        <div className="flex items-center justify-center py-24">
+          <Card className="w-full max-w-md">
+            <CardContent className="p-6 text-center">
+              <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">Error Loading Data</h3>
+              <p className="text-muted-foreground mb-4">{error}</p>
+              <Button onClick={() => window.location.reload()}>
+                Retry
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </PageShell>
     )
   }
 
   return (
-    <div>
-      {/* Header */}
-      <div className="bg-card border-b border-border -mx-6 px-6">
-        <div className="container mx-auto py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate('/dashboard')}
-                className="flex items-center space-x-2"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span>Back to Dashboard</span>
-              </Button>
-              <div className="w-px h-6 bg-slate-300 dark:bg-slate-600"></div>
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-blue-600 rounded-xl flex items-center justify-center">
-                  <Users className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-foreground">
-                    Team Management
-                  </h1>
-                  <p className="text-sm text-muted-foreground">
-                    Manage your team, permissions, and collaboration
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate('/settings?section=team')}
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Team Settings
-              </Button>
-              <Button>
-                <UserPlus className="h-4 w-4 mr-2" />
-                Invite Member
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="container mx-auto py-8">
-        {/* Tab Navigation */}
-        <div className="flex space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg mb-8">
-          {[
+    <PageShell {...teamHeader}>
+        <PageTabs
+          tabs={[
             { id: 'overview', label: 'Team Overview', icon: <Users className="h-4 w-4" /> },
             { id: 'members', label: 'Team Members', icon: <User className="h-4 w-4" /> },
             { id: 'tickets', label: 'Service Tickets', icon: <FileText className="h-4 w-4" /> },
             { id: 'predictive', label: 'Predictive Maintenance', icon: <TrendingUp className="h-4 w-4" /> },
             { id: 'analytics', label: 'Team Analytics', icon: <TrendingUp className="h-4 w-4" /> }
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`
-                flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all flex-1
-                ${activeTab === tab.id
-                  ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                }
-              `}
-            >
-              {tab.icon}
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </div>
+          ]}
+          value={activeTab}
+          onChange={setActiveTab}
+        />
 
         {/* Tab Content */}
         <div className="min-h-[600px]">
@@ -943,7 +908,6 @@ export function TeamManagement() {
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </PageShell>
   )
 }

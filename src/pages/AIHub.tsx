@@ -6,6 +6,9 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { FormField as FormControl, nativeSelectClassName } from '@/components/ui/form-field'
+import { PageShell } from '@/components/layout/PageShell'
+import { PageTabs } from '@/components/layout/PageTabs'
+import { GradientIcon } from '@/components/layout/GradientIcon'
 import {
   Activity,
   TrendingUp,
@@ -153,75 +156,29 @@ export function AIHub({ className = "" }: AIHubProps) {
   ]
 
   return (
-    <div className={className}>
-      {/* Header */}
-      <div className="bg-card border-b border-border -mx-6 px-6">
-        <div className="container mx-auto py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate('/dashboard')}
-                className="flex items-center space-x-2"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span>Back to Dashboard</span>
-              </Button>
-              <div className="w-px h-6 bg-slate-300 dark:bg-slate-600"></div>
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                  <Bot className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-foreground">
-                    AI Hub
-                  </h1>
-                  <p className="text-sm text-muted-foreground">
-                    Centralized AI management and assistance
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-3">
-              <Badge variant="secondary" className="bg-green-100 text-green-800">
-                <Sparkles className="h-3 w-3 mr-1" />
-                AI Active
-              </Badge>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate('/settings?section=ai')}
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                AI Settings
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="container mx-auto py-8">
-        {/* Tab Navigation */}
-        <div className="flex space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg mb-8">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`
-                flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all flex-1
-                ${activeTab === tab.id
-                  ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                }
-              `}
-            >
-              {tab.icon}
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </div>
+    <PageShell
+      className={className}
+      title="AI Hub"
+      subtitle="Centralized AI management and assistance"
+      icon={<GradientIcon icon={Bot} />}
+      actions={
+        <>
+          <Badge variant="secondary" className="bg-green-100 text-green-800">
+            <Sparkles className="h-3 w-3 mr-1" />
+            AI Active
+          </Badge>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/settings?section=ai')}
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            AI Settings
+          </Button>
+        </>
+      }
+    >
+        <PageTabs tabs={tabs} value={activeTab} onChange={setActiveTab} />
 
         {/* Tab Content */}
         <div className="min-h-[600px]">
@@ -1220,7 +1177,6 @@ export function AIHub({ className = "" }: AIHubProps) {
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </PageShell>
   )
 }

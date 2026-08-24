@@ -4,6 +4,7 @@ import { Menu } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { Button } from '@/components/ui/button'
 import { getDesktopSidebarCollapsed, setDesktopSidebarCollapsed } from '@/lib/sidebarStorage'
+import { HeaderSlot, LayoutSlotsProvider } from './LayoutSlots'
 
 const DESKTOP_QUERY = '(min-width: 1024px)'
 
@@ -72,58 +73,60 @@ export function AppLayout() {
 
   const sidebarVisible = isDesktop || mobileOpen
   const sidebarCollapsed = isDesktop && desktopCollapsed
-  const flushLayout = location.pathname.startsWith('/assets')
 
   return (
-    <div className="min-h-screen bg-background">
-      {!isDesktop && !mobileOpen && (
-        <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-card px-4 py-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="p-2"
-            aria-label="Open navigation"
-            onClick={() => setMobileOpen(true)}
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
-          <span className="font-semibold text-foreground">ServiceAI</span>
+    <LayoutSlotsProvider>
+      <div className="min-h-screen bg-background flex flex-col">
+        {!isDesktop && !mobileOpen && (
+          <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-card px-4 py-3 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="p-2"
+              aria-label="Open navigation"
+              onClick={() => setMobileOpen(true)}
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            <span className="font-semibold text-foreground">ServiceAI</span>
+          </div>
+        )}
+
+        {mobileOpen && !isDesktop && (
+          <button
+            type="button"
+            className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+            aria-label="Close navigation"
+            onClick={() => setMobileOpen(false)}
+          />
+        )}
+
+        <div
+          className={`fixed inset-y-0 left-0 z-50 transform transition-all duration-200 ${
+            sidebarCollapsed ? 'w-16' : 'w-64 lg:w-72'
+          } ${
+            sidebarVisible ? 'translate-x-0' : '-translate-x-full pointer-events-none'
+          }`}
+        >
+          <Sidebar
+            collapsed={sidebarCollapsed}
+            isDesktop={isDesktop}
+            onClose={() => setMobileOpen(false)}
+            onToggleCollapsed={() => persistCollapsed(!desktopCollapsed)}
+          />
         </div>
-      )}
 
-      {mobileOpen && !isDesktop && (
-        <button
-          type="button"
-          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
-          aria-label="Close navigation"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-
-      <div
-        className={`fixed inset-y-0 left-0 z-50 transform transition-all duration-200 ${
-          sidebarCollapsed ? 'w-16' : 'w-64 lg:w-72'
-        } ${
-          sidebarVisible ? 'translate-x-0' : '-translate-x-full pointer-events-none'
-        }`}
-      >
-        <Sidebar
-          collapsed={sidebarCollapsed}
-          isDesktop={isDesktop}
-          onClose={() => setMobileOpen(false)}
-          onToggleCollapsed={() => persistCollapsed(!desktopCollapsed)}
-        />
-      </div>
-
-      <div
-        className={`transition-[margin] duration-200 ${
-          isDesktop ? (desktopCollapsed ? 'lg:ml-16' : 'lg:ml-72') : ''
-        }`}
-      >
-        <div className={flushLayout ? undefined : 'px-6'}>
-          <Outlet />
+        <div
+          className={`flex flex-1 flex-col min-h-0 transition-[margin] duration-200 ${
+            isDesktop ? (desktopCollapsed ? 'lg:ml-16' : 'lg:ml-72') : ''
+          }`}
+        >
+          <HeaderSlot />
+          <div className="flex flex-1 flex-col min-h-0">
+            <Outlet />
+          </div>
         </div>
       </div>
-    </div>
+    </LayoutSlotsProvider>
   )
 }

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { FormField, nativeSelectClassName } from '@/components/ui/form-field'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
+import { PageShell } from '@/components/layout/PageShell'
+import { SettingsNav } from '@/components/settings/SettingsNav'
 import { getSelectedVertical } from '@/lib/verticalStorage'
 import { getVerticalDisplayName } from '@/lib/verticalContent'
 import {
@@ -17,7 +19,6 @@ import {
   Database,
   Save,
   RotateCcw,
-  ArrowLeft,
   Search,
   Workflow,
   FileText,
@@ -38,7 +39,6 @@ interface SettingsSection {
 const SETTINGS_SECTIONS = ['general', 'ai', 'dashboard', 'assets', 'team', 'integrations'] as const
 
 export function Settings() {
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const sectionFromUrl = searchParams.get('section')
   const [activeSection, setActiveSection] = useState(
@@ -620,78 +620,36 @@ export function Settings() {
   ]
 
   return (
-    <div>
-      {/* Header */}
-      <div className="bg-card border-b border-border -mx-6 px-6">
-        <div className="container mx-auto py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate('/dashboard')}
-                className="flex items-center space-x-2"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span>Back to Dashboard</span>
-              </Button>
-              <div className="w-px h-6 bg-slate-300 dark:bg-slate-600"></div>
-              <SettingsIcon className="h-6 w-6 text-muted-foreground" />
-              <div>
-                <h1 className="text-xl font-semibold text-foreground">
-                  Settings
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  Configure your ServiceAI experience
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-3">
-              <Button variant="outline" onClick={handleReset}>
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Reset
-              </Button>
-              <Button onClick={handleSave}>
-                <Save className="h-4 w-4 mr-2" />
-                Save Changes
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="container mx-auto py-8">
+    <PageShell
+      title="Settings"
+      subtitle="Configure your ServiceAI experience"
+      icon={<SettingsIcon className="h-6 w-6 text-muted-foreground" />}
+      compact
+      actions={
+        <>
+          <Button variant="outline" onClick={handleReset}>
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Reset
+          </Button>
+          <Button onClick={handleSave}>
+            <Save className="h-4 w-4 mr-2" />
+            Save Changes
+          </Button>
+        </>
+      }
+    >
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Sidebar Navigation */}
           <div className="lg:col-span-1">
-            <Card>
-              <CardContent className="p-4">
-                <nav className="space-y-2">
-                  {sections.map((section) => (
-                    <button
-                      key={section.id}
-                      onClick={() => selectSection(section.id)}
-                      className={`
-                        w-full flex items-center space-x-3 px-3 py-2 text-left rounded-md transition-colors
-                        ${activeSection === section.id
-                          ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
-                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
-                        }
-                      `}
-                    >
-                      {section.icon}
-                      <div>
-                        <div className="font-medium text-sm">{section.title}</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                          {section.description}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </nav>
-              </CardContent>
-            </Card>
+            <SettingsNav
+              items={sections.map(({ id, title, description, icon }) => ({
+                id,
+                title,
+                description,
+                icon,
+              }))}
+              activeId={activeSection}
+              onSelect={selectSection}
+            />
           </div>
 
           {/* Main Content */}
@@ -715,7 +673,6 @@ export function Settings() {
             </Card>
           </div>
         </div>
-      </div>
-    </div>
+    </PageShell>
   )
 }
