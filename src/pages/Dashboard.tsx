@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Button } from './ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Badge } from './ui/badge'
-import { DataImport } from './DataImport'
-import { getSelectedVertical } from '../lib/verticalStorage'
-import { getVerticalContent } from '../lib/verticalContent'
-import { apiService, type DashboardOverview, type DashboardStat } from '../services/api'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { DataImport } from '@/components/import/DataImport'
+import { getSelectedVertical } from '@/lib/verticalStorage'
+import { getVerticalContent } from '@/lib/verticalContent'
+import { apiService, type DashboardOverview, type DashboardStat } from '@/services/api'
 import {
   AlertCircle,
   AlertTriangle,
@@ -108,19 +108,19 @@ export function Dashboard() {
   }, [loadOverview])
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
-        <div className="container mx-auto px-6 py-4">
+    <div>
+      <div className="bg-card border-b border-border -mx-6 px-6">
+        <div className="container mx-auto py-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center space-x-3 min-w-0">
               <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
                 <VerticalIcon className="h-6 w-6 text-white" />
               </div>
               <div className="min-w-0">
-                <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                <h1 className="text-2xl font-bold text-foreground">
                   {vertical.name} Dashboard
                 </h1>
-                <p className="text-sm text-slate-600 dark:text-slate-400">
+                <p className="text-sm text-muted-foreground">
                   {vertical.description}
                 </p>
               </div>
@@ -144,7 +144,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="container mx-auto px-6 py-8">
+      <div className="container mx-auto py-8">
         <div className="flex flex-col sm:flex-row flex-wrap gap-2 mb-8">
           <Button variant="outline" size="sm" onClick={() => navigate('/assets')}>
             <Package className="h-4 w-4 mr-2 shrink-0 block" />
@@ -190,7 +190,7 @@ export function Dashboard() {
                 Error Loading Dashboard
               </h3>
               <p className="text-slate-600 dark:text-slate-400 mb-4">{error}</p>
-              <Button onClick={loadOverview} className="bg-blue-500 hover:bg-blue-600 text-white">
+              <Button onClick={loadOverview}>
                 Retry
               </Button>
             </CardContent>

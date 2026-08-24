@@ -39,7 +39,7 @@ VITE_SUPABASE_ANON_KEY=your-new-anon-key-here
 4. Paste and click **Run**
 
 ### Step 5: Test Connection
-Run: `node backend/test-supabase.js`
+Run: `node backend/scripts/test-supabase.js`
 
 ### Expected Result
 ```

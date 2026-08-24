@@ -1,5 +1,5 @@
-import { AISearch } from "../ui/AISearch"
-import { BackButton } from "../ui/BackButton"
+import { AISearch } from "@/components/ai/AISearch"
+import { BackButton } from "@/components/ui/BackButton"
 
 export function TestAISearchPage() {
   return (

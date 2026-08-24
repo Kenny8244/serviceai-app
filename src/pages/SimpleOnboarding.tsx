@@ -1,8 +1,8 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Button } from './ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CheckCircle, ArrowRight, Sparkles } from 'lucide-react'
-import { getSelectedVertical } from '../lib/verticalStorage'
+import { getSelectedVertical } from '@/lib/verticalStorage'
 
 interface OnboardingConfirmationProps {
   onComplete?: () => void

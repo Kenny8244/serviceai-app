@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import { Sidebar } from './Sidebar'
-import { Button } from './ui/button'
-import { getDesktopSidebarCollapsed, setDesktopSidebarCollapsed } from '../lib/sidebarStorage'
+import { Button } from '@/components/ui/button'
+import { getDesktopSidebarCollapsed, setDesktopSidebarCollapsed } from '@/lib/sidebarStorage'
 
 const DESKTOP_QUERY = '(min-width: 1024px)'
 
@@ -72,11 +72,12 @@ export function AppLayout() {
 
   const sidebarVisible = isDesktop || mobileOpen
   const sidebarCollapsed = isDesktop && desktopCollapsed
+  const flushLayout = location.pathname.startsWith('/assets')
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+    <div className="min-h-screen bg-background">
       {!isDesktop && !mobileOpen && (
-        <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
+        <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-card px-4 py-3">
           <Button
             variant="ghost"
             size="sm"
@@ -86,7 +87,7 @@ export function AppLayout() {
           >
             <Menu className="h-5 w-5" />
           </Button>
-          <span className="font-semibold text-slate-900 dark:text-slate-100">ServiceAI</span>
+          <span className="font-semibold text-foreground">ServiceAI</span>
         </div>
       )}
 
@@ -119,7 +120,9 @@ export function AppLayout() {
           isDesktop ? (desktopCollapsed ? 'lg:ml-16' : 'lg:ml-72') : ''
         }`}
       >
-        <Outlet />
+        <div className={flushLayout ? undefined : 'px-6'}>
+          <Outlet />
+        </div>
       </div>
     </div>
   )

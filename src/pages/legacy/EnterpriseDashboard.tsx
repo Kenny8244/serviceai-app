@@ -1,9 +1,9 @@
 import { useNavigate } from "react-router-dom"
-import { Button } from "../ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Building2, Users, Workflow, Shield, BarChart3, Settings, LogOut, Zap } from "lucide-react"
-import { BackButton } from "../ui/BackButton"
-import { AIAssistant } from "../ui/AIAssistant"
+import { BackButton } from "@/components/ui/BackButton"
+import { AIAssistant } from "@/components/ai/AIAssistant"
 
 export function EnterpriseDashboard() {
   const navigate = useNavigate()

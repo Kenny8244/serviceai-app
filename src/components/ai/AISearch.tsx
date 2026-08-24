@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Search, Sparkles, X, Loader2 } from "lucide-react"
-import { Button } from "./button"
-import { Card, CardContent } from "./card"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 
 interface SearchResult {
   id: string

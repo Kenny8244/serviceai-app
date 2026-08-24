@@ -1,10 +1,11 @@
 import React, { useState } from "react"
-import { Button } from "../ui/button"
-import { Input } from "../ui/input"
-import { Label } from "../ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { FormField, nativeSelectClassName } from "@/components/ui/form-field"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Sparkles, ArrowRight, Shield, Zap, Brain, Users } from "lucide-react"
-import { apiService, type CreateUserRequest, type LoginRequest } from "../../services/api"
+import { apiService, type CreateUserRequest, type LoginRequest } from "@/services/api"
 
 interface AuthPageProps {
   onAuthSuccess: () => void
@@ -245,10 +246,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                     <>
                       {/* Personal Information */}
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="firstName" className="text-foreground font-medium">
-                            First Name *
-                          </Label>
+                        <FormField label="First Name" htmlFor="firstName" required>
                           <Input
                             id="firstName"
                             type="text"
@@ -258,11 +256,8 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                             required
                             className="h-12 bg-input/50 border-border/50 backdrop-blur-sm focus:gradient-input-focus transition-all"
                           />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="lastName" className="text-foreground font-medium">
-                            Last Name *
-                          </Label>
+                        </FormField>
+                        <FormField label="Last Name" htmlFor="lastName" required>
                           <Input
                             id="lastName"
                             type="text"
@@ -272,14 +267,10 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                             required
                             className="h-12 bg-input/50 border-border/50 backdrop-blur-sm focus:gradient-input-focus transition-all"
                           />
-                        </div>
+                        </FormField>
                       </div>
 
-                      {/* Company Information */}
-                      <div className="space-y-2">
-                        <Label htmlFor="companyName" className="text-foreground font-medium">
-                          Company Name *
-                        </Label>
+                      <FormField label="Company Name" htmlFor="companyName" required>
                         <Input
                           id="companyName"
                           type="text"
@@ -289,13 +280,10 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                           required
                           className="h-12 bg-input/50 border-border/50 backdrop-blur-sm focus:gradient-input-focus transition-all"
                         />
-                      </div>
+                      </FormField>
 
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="jobTitle" className="text-foreground font-medium">
-                            Job Title
-                          </Label>
+                        <FormField label="Job Title" htmlFor="jobTitle">
                           <Input
                             id="jobTitle"
                             type="text"
@@ -304,11 +292,8 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                             onChange={(e) => setJobTitle(e.target.value)}
                             className="h-12 bg-input/50 border-border/50 backdrop-blur-sm focus:gradient-input-focus transition-all"
                           />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="phoneNumber" className="text-foreground font-medium">
-                            Phone Number *
-                          </Label>
+                        </FormField>
+                        <FormField label="Phone Number" htmlFor="phoneNumber" required>
                           <Input
                             id="phoneNumber"
                             type="tel"
@@ -318,19 +303,16 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                             required
                             className="h-12 bg-input/50 border-border/50 backdrop-blur-sm focus:gradient-input-focus transition-all"
                           />
-                        </div>
+                        </FormField>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="companySize" className="text-foreground font-medium">
-                            Company Size
-                          </Label>
+                        <FormField label="Company Size" htmlFor="companySize">
                           <select
                             id="companySize"
                             value={companySize}
                             onChange={(e) => setCompanySize(e.target.value)}
-                            className="h-12 w-full rounded-md border border-border/50 bg-input/50 px-3 py-2 text-sm backdrop-blur-sm focus:gradient-input-focus focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                            className={`${nativeSelectClassName} h-12 bg-input/50 border-border/50 backdrop-blur-sm`}
                           >
                             <option value="">Select company size</option>
                             <option value="1-10">1-10 employees</option>
@@ -339,16 +321,13 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                             <option value="201-500">201-500 employees</option>
                             <option value="500+">500+ employees</option>
                           </select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="industry" className="text-foreground font-medium">
-                            Industry
-                          </Label>
+                        </FormField>
+                        <FormField label="Industry" htmlFor="industry">
                           <select
                             id="industry"
                             value={industry}
                             onChange={(e) => setIndustry(e.target.value)}
-                            className="h-12 w-full rounded-md border border-border/50 bg-input/50 px-3 py-2 text-sm backdrop-blur-sm focus:gradient-input-focus focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                            className={`${nativeSelectClassName} h-12 bg-input/50 border-border/50 backdrop-blur-sm`}
                           >
                             <option value="">Select industry</option>
                             <option value="retail">Retail</option>
@@ -360,14 +339,10 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                             <option value="education">Education</option>
                             <option value="other">Other</option>
                           </select>
-                        </div>
+                        </FormField>
                       </div>
 
-                      {/* Contact Information */}
-                      <div className="space-y-2">
-                        <Label htmlFor="email" className="text-foreground font-medium">
-                          Business Email *
-                        </Label>
+                      <FormField label="Business Email" htmlFor="email" required>
                         <Input
                           id="email"
                           type="email"
@@ -377,14 +352,10 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                           required
                           className="h-12 bg-input/50 border-border/50 backdrop-blur-sm focus:gradient-input-focus transition-all"
                         />
-                      </div>
+                      </FormField>
 
-                      {/* Password Fields */}
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="password" className="text-foreground font-medium">
-                            Password *
-                          </Label>
+                        <FormField label="Password" htmlFor="password" required>
                           <Input
                             id="password"
                             type="password"
@@ -396,11 +367,13 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                             className="h-12 bg-input/50 border-border/50 backdrop-blur-sm focus:gradient-input-focus transition-all"
                           />
                           <p className="text-xs text-muted-foreground">Minimum 8 characters</p>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="confirmPassword" className="text-foreground font-medium">
-                            Confirm Password *
-                          </Label>
+                        </FormField>
+                        <FormField
+                          label="Confirm Password"
+                          htmlFor="confirmPassword"
+                          required
+                          error={confirmPassword && password !== confirmPassword ? 'Passwords do not match' : undefined}
+                        >
                           <Input
                             id="confirmPassword"
                             type="password"
@@ -409,21 +382,16 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             required
                             minLength={8}
+                            aria-invalid={Boolean(confirmPassword && password !== confirmPassword)}
                             className="h-12 bg-input/50 border-border/50 backdrop-blur-sm focus:gradient-input-focus transition-all"
                           />
-                          {confirmPassword && password !== confirmPassword && (
-                            <p className="text-xs text-red-500">Passwords do not match</p>
-                          )}
-                        </div>
+                        </FormField>
                       </div>
                     </>
                   ) : (
                     <>
                       {/* Login Form */}
-                      <div className="space-y-2">
-                        <Label htmlFor="email" className="text-foreground font-medium">
-                          Email address
-                        </Label>
+                      <FormField label="Email address" htmlFor="email">
                         <Input
                           id="email"
                           type="email"
@@ -433,12 +401,9 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                           required
                           className="h-12 bg-input/50 border-border/50 backdrop-blur-sm focus:gradient-input-focus transition-all"
                         />
-                      </div>
+                      </FormField>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="password" className="text-foreground font-medium">
-                          Password
-                        </Label>
+                      <FormField label="Password" htmlFor="password">
                         <Input
                           id="password"
                           type="password"
@@ -448,7 +413,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                           required
                           className="h-12 bg-input/50 border-border/50 backdrop-blur-sm focus:gradient-input-focus transition-all"
                         />
-                      </div>
+                      </FormField>
 
                       <div className="flex items-center space-x-2">
                         <input

@@ -1,10 +1,10 @@
 import { useState } from "react"
-import { Button } from "../ui/button"
-import { Card, CardDescription, CardHeader, CardTitle } from "../ui/card"
+import { Button } from "@/components/ui/button"
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { UtensilsCrossed, ArrowRight, CheckCircle, Clock, ChefHat, Users } from "lucide-react"
-import { AISearch } from "../ui/AISearch"
-import { BackButton } from "../ui/BackButton"
-import { AIAssistant } from "../ui/AIAssistant"
+import { AISearch } from "@/components/ai/AISearch"
+import { BackButton } from "@/components/ui/BackButton"
+import { AIAssistant } from "@/components/ai/AIAssistant"
 
 interface RestaurantLandingPageProps {
   onGetStarted: () => void

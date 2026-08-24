@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button } from './ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Badge } from './ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import {
   Activity,
   Target,
@@ -38,10 +38,10 @@ export function Analytics() {
   ]
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+    <div>
       {/* Header */}
-      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
-        <div className="container mx-auto px-6 py-4">
+      <div className="bg-card border-b border-border -mx-6 px-6">
+        <div className="container mx-auto py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <Button
@@ -59,10 +59,10 @@ export function Analytics() {
                   <BarChart3 className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                  <h1 className="text-2xl font-bold text-foreground">
                     Analytics Dashboard
                   </h1>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                  <p className="text-sm text-muted-foreground">
                     Comprehensive insights and performance metrics
                   </p>
                 </div>
@@ -87,7 +87,7 @@ export function Analytics() {
         </div>
       </div>
 
-      <div className="container mx-auto px-6 py-8">
+      <div className="container mx-auto py-8">
         {/* Tab Navigation */}
         <div className="flex space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg mb-8">
           {tabs.map((tab) => (

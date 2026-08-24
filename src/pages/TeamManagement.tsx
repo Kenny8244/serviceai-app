@@ -1,32 +1,30 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button } from './ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Badge } from './ui/badge'
-import { apiService } from '../services/api'
-import type { TeamMember, ServiceTicket } from '../services/api'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { apiService } from '@/services/api'
+import type { TeamMember, ServiceTicket } from '@/services/api'
 import {
   Users,
   UserPlus,
   Settings,
-  Shield,
   Activity,
   ArrowLeft,
   Search,
   Filter,
-  MoreVertical,
   Edit3,
   MessageSquare,
   CheckCircle,
   Clock,
   XCircle,
-  Crown,
   User,
   FileText,
   TrendingUp,
   AlertCircle,
   Award,
-  Bot,
   Brain,
   Route,
   Target,
@@ -196,23 +194,23 @@ export function TeamManagement() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
+      <div className="flex items-center justify-center py-24">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-slate-600 dark:text-slate-400">Loading team data...</p>
+          <p className="text-muted-foreground">Loading team data...</p>
         </div>
       </div>
     )
   }
 
-  if (error) {
+  if (error && teamMembers.length === 0) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
+      <div className="flex items-center justify-center py-24">
         <Card className="w-full max-w-md">
           <CardContent className="p-6 text-center">
             <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">Error Loading Data</h3>
-            <p className="text-slate-600 dark:text-slate-400 mb-4">{error}</p>
+            <h3 className="text-lg font-semibold text-foreground mb-2">Error Loading Data</h3>
+            <p className="text-muted-foreground mb-4">{error}</p>
             <Button onClick={() => window.location.reload()}>
               Retry
             </Button>
@@ -223,10 +221,10 @@ export function TeamManagement() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+    <div>
       {/* Header */}
-      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
-        <div className="container mx-auto px-6 py-4">
+      <div className="bg-card border-b border-border -mx-6 px-6">
+        <div className="container mx-auto py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <Button
@@ -244,10 +242,10 @@ export function TeamManagement() {
                   <Users className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                  <h1 className="text-2xl font-bold text-foreground">
                     Team Management
                   </h1>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                  <p className="text-sm text-muted-foreground">
                     Manage your team, permissions, and collaboration
                   </p>
                 </div>
@@ -255,11 +253,15 @@ export function TeamManagement() {
             </div>
 
             <div className="flex items-center space-x-3">
-              <Button variant="outline" size="sm">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate('/settings?section=team')}
+              >
                 <Settings className="h-4 w-4 mr-2" />
                 Team Settings
               </Button>
-              <Button className="bg-green-500 hover:bg-green-600 text-white">
+              <Button>
                 <UserPlus className="h-4 w-4 mr-2" />
                 Invite Member
               </Button>
@@ -268,7 +270,7 @@ export function TeamManagement() {
         </div>
       </div>
 
-      <div className="container mx-auto px-6 py-8">
+      <div className="container mx-auto py-8">
         {/* Tab Navigation */}
         <div className="flex space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg mb-8">
           {[
@@ -457,12 +459,12 @@ export function TeamManagement() {
                 <div className="flex items-center space-x-4 flex-1">
                   <div className="relative flex-1 max-w-md">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <input
+                    <Input
                       type="text"
                       placeholder="Search team members..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="pl-10"
                     />
                   </div>
                   <Button variant="outline" size="sm">
@@ -470,54 +472,45 @@ export function TeamManagement() {
                     Filter
                   </Button>
                 </div>
-                <Button className="bg-green-500 hover:bg-green-600 text-white">
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Invite Member
-                </Button>
+              <Button>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Invite Member
+              </Button>
               </div>
 
               {/* Team Members Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredMembers.map((member) => (
-                  <Card key={member.id} className="hover:shadow-lg transition-shadow">
-                    <CardHeader className="pb-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                            <span className="text-white font-medium">
-                              {member.name.split(' ').map(n => n[0]).join('')}
-                            </span>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredMembers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                        No team members found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredMembers.map((member) => (
+                      <TableRow key={member.id}>
+                        <TableCell>
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shrink-0">
+                              <span className="text-white text-xs font-medium">
+                                {member.name.split(' ').map(n => n[0]).join('')}
+                              </span>
+                            </div>
+                            <span className="font-medium">{member.name}</span>
                           </div>
-                          <div>
-                            <h3 className="font-semibold text-slate-900 dark:text-slate-100">{member.name}</h3>
-                            <p className="text-sm text-slate-600 dark:text-slate-400">{member.email}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          {member.status === 'online' ? (
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                          ) : member.status === 'away' ? (
-                            <Clock className="h-4 w-4 text-yellow-600" />
-                          ) : (
-                            <XCircle className="h-4 w-4 text-slate-400" />
-                          )}
-                          <Button variant="ghost" size="sm">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          {member.role === 'admin' ? (
-                            <Crown className="h-4 w-4 text-yellow-600" />
-                          ) : member.role === 'manager' ? (
-                            <Shield className="h-4 w-4 text-blue-600" />
-                          ) : (
-                            <User className="h-4 w-4 text-slate-600" />
-                          )}
+                        </TableCell>
+                        <TableCell>{member.email}</TableCell>
+                        <TableCell>
                           <Badge className={
                             member.role === 'admin' ? 'bg-yellow-100 text-yellow-800' :
                             member.role === 'manager' ? 'bg-blue-100 text-blue-800' :
@@ -526,47 +519,36 @@ export function TeamManagement() {
                           }>
                             {member.role}
                           </Badge>
-                        </div>
-                        <span className="text-xs text-slate-500">
-                          Joined {member.joinDate.toLocaleDateString()}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-4 text-center">
-                        <div>
-                          <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                            {member.stats.ticketsResolved}
-                          </p>
-                          <p className="text-xs text-slate-600 dark:text-slate-400">Tickets</p>
-                        </div>
-                        <div>
-                          <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                            {member.stats.avgResponseTime}
-                          </p>
-                          <p className="text-xs text-slate-600 dark:text-slate-400">Avg Time</p>
-                        </div>
-                        <div>
-                          <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                            {member.stats.satisfaction}/5
-                          </p>
-                          <p className="text-xs text-slate-600 dark:text-slate-400">Rating</p>
-                        </div>
-                      </div>
-
-                      <div className="flex space-x-2">
-                        <Button variant="outline" size="sm" className="flex-1">
-                          <Edit3 className="h-4 w-4 mr-2" />
-                          Edit
-                        </Button>
-                        <Button variant="outline" size="sm" className="flex-1">
-                          <MessageSquare className="h-4 w-4 mr-2" />
-                          Message
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center gap-1.5">
+                            {member.status === 'online' ? (
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            ) : member.status === 'away' ? (
+                              <Clock className="h-4 w-4 text-yellow-600" />
+                            ) : (
+                              <XCircle className="h-4 w-4 text-slate-400" />
+                            )}
+                            {member.status}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end space-x-2">
+                            <Button variant="outline" size="sm">
+                              <Edit3 className="h-4 w-4 mr-2" />
+                              Edit
+                            </Button>
+                            <Button variant="outline" size="sm">
+                              <MessageSquare className="h-4 w-4 mr-2" />
+                              Message
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
             </div>
           )}
 
@@ -587,7 +569,7 @@ export function TeamManagement() {
                     <Filter className="h-4 w-4 mr-2" />
                     Filter
                   </Button>
-                  <Button className="bg-blue-500 hover:bg-blue-600 text-white">
+                  <Button>
                     <FileText className="h-4 w-4 mr-2" />
                     New Ticket
                   </Button>
@@ -595,120 +577,103 @@ export function TeamManagement() {
               </div>
 
               {/* Tickets List */}
-              <div className="space-y-4">
-                {serviceTickets.map((ticket) => {
-                  const availableMembers = teamMembers.filter(member =>
-                    member.status === 'online' && member.role !== 'guest'
-                  )
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Assignee</TableHead>
+                    <TableHead>Priority</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {serviceTickets.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground">
+                        No service tickets yet
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    serviceTickets.map((ticket) => {
+                      const availableMembers = teamMembers.filter(member =>
+                        member.status === 'online' && member.role !== 'guest'
+                      )
 
-                  const ticketContent = `${ticket.title} ${ticket.lastMessage}`.toLowerCase()
-                  const keywords = ticketContent.match(/\b\w+\b/g) || []
+                      const ticketContent = `${ticket.title} ${ticket.lastMessage}`.toLowerCase()
+                      const keywords = ticketContent.match(/\b\w+\b/g) || []
 
-                  const scoredMembers = availableMembers.map(member => {
-                    let score = 0
+                      const scoredMembers = availableMembers.map(member => {
+                        let score = 0
 
-                    const expertiseMatch = member.expertise.filter(exp =>
-                      keywords.some(keyword => exp.toLowerCase().includes(keyword) || keyword.includes(exp.toLowerCase()))
-                    ).length
-                    score += (expertiseMatch / member.expertise.length) * 40
+                        const expertiseMatch = member.expertise.filter(exp =>
+                          keywords.some(keyword => exp.toLowerCase().includes(keyword) || keyword.includes(exp.toLowerCase()))
+                        ).length
+                        score += (expertiseMatch / member.expertise.length) * 40
 
-                    const workloadScore = Math.max(0, 30 - member.workload)
-                    score += workloadScore
+                        const workloadScore = Math.max(0, 30 - member.workload)
+                        score += workloadScore
 
-                    const performanceScore = (member.stats.satisfaction / 5) * 20
-                    score += performanceScore
+                        const performanceScore = (member.stats.satisfaction / 5) * 20
+                        score += performanceScore
 
-                    const availabilityScore = member.status === 'online' ? 10 : 5
-                    score += availabilityScore
+                        const availabilityScore = member.status === 'online' ? 10 : 5
+                        score += availabilityScore
 
-                    return { member, score }
-                  })
+                        return { member, score }
+                      })
 
-                  scoredMembers.sort((a, b) => b.score - a.score)
-                  const routingSuggestion = scoredMembers[0] || null
+                      scoredMembers.sort((a, b) => b.score - a.score)
+                      const routingSuggestion = scoredMembers[0] || null
 
-                  return (
-                    <Card key={ticket.id} className="hover:shadow-lg transition-shadow">
-                      <CardContent className="p-6">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-3 mb-2">
-                              <h3 className="font-semibold text-slate-900 dark:text-slate-100">{ticket.title}</h3>
-                              <Badge className={
-                                ticket.priority === 'urgent' ? 'bg-red-100 text-red-800' :
-                                ticket.priority === 'high' ? 'bg-orange-100 text-orange-800' :
-                                ticket.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-green-100 text-green-800'
-                              }>
-                                {ticket.priority}
-                              </Badge>
-                              <Badge variant={ticket.status === 'resolved' ? 'default' : 'secondary'}>
-                                {ticket.status}
-                              </Badge>
-                              {routingSuggestion && (
-                                <Badge className="bg-blue-100 text-blue-800">
-                                  <Bot className="h-3 w-3 mr-1" />
-                                  AI Suggested
-                                </Badge>
-                              )}
+                      return (
+                        <TableRow key={ticket.id}>
+                          <TableCell>
+                            <div className="font-medium">{ticket.title}</div>
+                            {routingSuggestion ? (
+                              <p className="text-xs text-blue-600 mt-1">
+                                AI suggests: {routingSuggestion.member.name} ({routingSuggestion.score.toFixed(1)}/100)
+                              </p>
+                            ) : null}
+                          </TableCell>
+                          <TableCell>{ticket.assignee}</TableCell>
+                          <TableCell>
+                            <Badge className={
+                              ticket.priority === 'urgent' ? 'bg-red-100 text-red-800' :
+                              ticket.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+                              ticket.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-green-100 text-green-800'
+                            }>
+                              {ticket.priority}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={ticket.status === 'resolved' ? 'default' : 'secondary'}>
+                              {ticket.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{ticket.createdAt.toLocaleDateString()}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end space-x-2">
+                              {routingSuggestion ? (
+                                <Button variant="outline" size="sm">
+                                  <Route className="h-4 w-4 mr-1" />
+                                  Reassign
+                                </Button>
+                              ) : null}
+                              <Button variant="outline" size="sm">
+                                <MessageSquare className="h-4 w-4 mr-2" />
+                                Reply
+                              </Button>
                             </div>
-
-                            <div className="flex items-center space-x-4 text-sm text-slate-600 dark:text-slate-400 mb-3">
-                              <span>Current: {ticket.assignee}</span>
-                              <span>Created: {ticket.createdAt.toLocaleDateString()}</span>
-                              <span>{ticket.messages} messages</span>
-                              {routingSuggestion && (
-                                <span className="text-blue-600 font-medium">
-                                  AI suggests: {routingSuggestion.member.name}
-                                </span>
-                              )}
-                            </div>
-
-                            <p className="text-sm text-slate-700 dark:text-slate-300">
-                              {ticket.lastMessage}
-                            </p>
-
-                            {routingSuggestion && (
-                              <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center space-x-2">
-                                    <Bot className="h-4 w-4 text-blue-600" />
-                                    <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                                      AI Routing Suggestion
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    <span className="text-xs text-blue-700 dark:text-blue-300">
-                                      Score: {routingSuggestion.score.toFixed(1)}/100
-                                    </span>
-                                    <Button variant="outline" size="sm">
-                                      <Route className="h-4 w-4 mr-1" />
-                                      Reassign
-                                    </Button>
-                                  </div>
-                                </div>
-                                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                                  Based on expertise match, workload, and performance metrics
-                                </p>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="flex items-center space-x-2">
-                            <Button variant="outline" size="sm">
-                              <MessageSquare className="h-4 w-4 mr-2" />
-                              Reply
-                            </Button>
-                            <Button variant="ghost" size="sm">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-              </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  )}
+                </TableBody>
+              </Table>
             </div>
           )}
 

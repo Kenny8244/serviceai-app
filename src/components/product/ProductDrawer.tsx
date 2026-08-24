@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react"
-import { Button } from "../ui/button"
-import { Card, CardContent } from "../ui/card"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { FormField, nativeSelectClassName } from "@/components/ui/form-field"
 import { X, Save, AlertCircle, CheckCircle } from "lucide-react"
 
 interface Product {
@@ -289,61 +292,33 @@ export function ProductDrawer({ isOpen, onClose, onSave }: ProductDrawerProps) {
           <div className="flex-1 overflow-y-auto p-6">
             {!showSuccess ? (
               <div className="space-y-6">
-                {/* Product Name */}
-                <div>
-                  <label htmlFor="productName" className="block text-sm font-medium text-foreground mb-2">
-                    Product Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
+                <FormField label="Product Name" htmlFor="productName" required error={errors.name}>
+                  <Input
                     id="productName"
                     type="text"
                     value={formData.name}
                     onChange={(e) => handleInputChange("name", e.target.value)}
                     placeholder="e.g., Wireless Mouse"
-                    className={`w-full h-10 px-3 rounded-lg border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-colors ${
-                      errors.name ? "border-red-500" : "border-border hover:border-border/80"
-                    }`}
+                    aria-invalid={Boolean(errors.name)}
                   />
-                  {errors.name && (
-                    <p className="text-sm text-red-500 mt-1 flex items-center">
-                      <AlertCircle className="h-3 w-3 mr-1" />
-                      {errors.name}
-                    </p>
-                  )}
-                </div>
+                </FormField>
 
-                {/* SKU */}
-                <div>
-                  <label htmlFor="productSku" className="block text-sm font-medium text-foreground mb-2">
-                    SKU <span className="text-red-500">*</span>
-                  </label>
-                  <input
+                <FormField label="SKU" htmlFor="productSku" required error={errors.sku}>
+                  <Input
                     id="productSku"
                     type="text"
                     value={formData.sku}
                     onChange={(e) => handleInputChange("sku", e.target.value)}
                     placeholder="e.g., ELC-001"
-                    className={`w-full h-10 px-3 rounded-lg border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-colors ${
-                      errors.sku ? "border-red-500" : "border-border hover:border-border/80"
-                    }`}
+                    aria-invalid={Boolean(errors.sku)}
                   />
-                  {errors.sku && (
-                    <p className="text-sm text-red-500 mt-1 flex items-center">
-                      <AlertCircle className="h-3 w-3 mr-1" />
-                      {errors.sku}
-                    </p>
-                  )}
-                </div>
+                </FormField>
 
-                {/* Price and Quantity Row */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="productPrice" className="block text-sm font-medium text-foreground mb-2">
-                      Price <span className="text-red-500">*</span>
-                    </label>
+                  <FormField label="Price" htmlFor="productPrice" required error={errors.price}>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground">$</span>
-                      <input
+                      <Input
                         id="productPrice"
                         type="number"
                         min="0.01"
@@ -351,104 +326,67 @@ export function ProductDrawer({ isOpen, onClose, onSave }: ProductDrawerProps) {
                         value={formData.price}
                         onChange={(e) => handleInputChange("price", e.target.value)}
                         placeholder="0.00"
-                        className={`w-full h-10 pl-8 pr-3 rounded-lg border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-colors ${
-                          errors.price ? "border-red-500" : "border-border hover:border-border/80"
-                        }`}
+                        className="pl-8"
+                        aria-invalid={Boolean(errors.price)}
                       />
                     </div>
-                    {errors.price && (
-                      <p className="text-sm text-red-500 mt-1 flex items-center">
-                        <AlertCircle className="h-3 w-3 mr-1" />
-                        {errors.price}
-                      </p>
-                    )}
-                  </div>
+                  </FormField>
 
-                  <div>
-                    <label htmlFor="productQuantity" className="block text-sm font-medium text-foreground mb-2">
-                      Quantity <span className="text-red-500">*</span>
-                    </label>
-                    <input
+                  <FormField label="Quantity" htmlFor="productQuantity" required error={errors.quantity}>
+                    <Input
                       id="productQuantity"
                       type="number"
                       min="0"
                       value={formData.quantity}
                       onChange={(e) => handleInputChange("quantity", e.target.value)}
                       placeholder="0"
-                      className={`w-full h-10 px-3 rounded-lg border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-colors ${
-                        errors.quantity ? "border-red-500" : "border-border hover:border-border/80"
-                      }`}
+                      aria-invalid={Boolean(errors.quantity)}
                     />
-                    {errors.quantity && (
-                      <p className="text-sm text-red-500 mt-1 flex items-center">
-                        <AlertCircle className="h-3 w-3 mr-1" />
-                        {errors.quantity}
-                      </p>
-                    )}
-                  </div>
+                  </FormField>
                 </div>
 
-                {/* Category */}
-                <div>
-                  <label htmlFor="productCategory" className="block text-sm font-medium text-foreground mb-2">
-                    Category <span className="text-red-500">*</span>
-                  </label>
+                <FormField label="Category" htmlFor="productCategory" required error={errors.category}>
                   <select
                     id="productCategory"
                     value={formData.category}
                     onChange={(e) => handleInputChange("category", e.target.value)}
-                    className={`w-full h-10 px-3 rounded-lg border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-colors ${
-                      errors.category ? "border-red-500" : "border-border hover:border-border/80"
-                    }`}
+                    className={nativeSelectClassName}
+                    aria-invalid={Boolean(errors.category)}
                   >
                     <option value="">Select category...</option>
                     {CATEGORIES.map(category => (
                       <option key={category} value={category}>{category}</option>
                     ))}
                   </select>
-                  {errors.category && (
-                    <p className="text-sm text-red-500 mt-1 flex items-center">
-                      <AlertCircle className="h-3 w-3 mr-1" />
-                      {errors.category}
-                    </p>
-                  )}
-                </div>
+                </FormField>
 
-                {/* Status */}
-                <div>
-                  <label htmlFor="productStatus" className="block text-sm font-medium text-foreground mb-2">
-                    Status
-                  </label>
+                <FormField label="Status" htmlFor="productStatus">
                   <select
                     id="productStatus"
                     value={formData.status}
                     onChange={(e) => handleInputChange("status", e.target.value)}
-                    className="w-full h-10 px-3 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-colors hover:border-border/80"
+                    className={nativeSelectClassName}
                   >
                     {STATUS_OPTIONS.map(status => (
                       <option key={status} value={status}>{status}</option>
                     ))}
                   </select>
-                </div>
+                </FormField>
 
-                {/* Description */}
-                <div>
-                  <label htmlFor="productDescription" className="block text-sm font-medium text-foreground mb-2">
-                    Description (optional)
-                  </label>
-                  <textarea
+                <FormField label="Description (optional)" htmlFor="productDescription">
+                  <Textarea
                     id="productDescription"
                     value={formData.description}
                     onChange={(e) => handleInputChange("description", e.target.value)}
                     placeholder="Optional product description..."
                     maxLength={500}
                     rows={4}
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 resize-none transition-colors hover:border-border/80"
+                    className="resize-none"
                   />
-                  <p className="text-xs text-muted-foreground mt-1 text-right">
+                  <p className="text-xs text-muted-foreground text-right">
                     {formData.description.length}/500 characters
                   </p>
-                </div>
+                </FormField>
               </div>
             ) : (
               /* Success State */
@@ -523,7 +461,7 @@ export function ProductDrawer({ isOpen, onClose, onSave }: ProductDrawerProps) {
                       setShowDiscardConfirm(false)
                       onClose()
                     }}
-                    className="bg-red-600 hover:bg-red-700"
+                    variant="destructive"
                   >
                     Discard Changes
                   </Button>

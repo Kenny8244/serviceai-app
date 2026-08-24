@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react'
-import { Button } from './ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Alert, AlertDescription } from './ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Upload, FileText, CheckCircle, AlertCircle, X, Sheet, Edit3 } from 'lucide-react'
-import { googleSheetsService, loadGoogleAPIs, type GoogleSheet } from '../services/googleSheetsService'
+import { googleSheetsService, loadGoogleAPIs, type GoogleSheet } from '@/services/googleSheetsService'
 import { ManualDataEntry } from './ManualDataEntry'
 
 interface CSVData {
@@ -294,7 +295,7 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
                       or click to browse
                     </p>
                   </div>
-                  <Button onClick={handleUploadClick} className="bg-blue-500 hover:bg-blue-600 text-white">
+                  <Button onClick={handleUploadClick}>
                     Select CSV File
                   </Button>
                 </div>
@@ -331,7 +332,7 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
                 <p className="text-slate-600 dark:text-slate-400 mb-4">
                   Connect your Google Sheets to import data directly
                 </p>
-                <Button onClick={handleGoogleSignIn} disabled={sheetsLoading} className="bg-blue-500 hover:bg-blue-600 text-white">
+                <Button onClick={handleGoogleSignIn} disabled={sheetsLoading}>
                   {sheetsLoading ? 'Connecting...' : 'Connect Google Sheets'}
                 </Button>
               </div>
@@ -436,32 +437,32 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
               </span>
             </div>
 
-            <div className="border rounded-lg overflow-hidden">
-              <div className="bg-slate-50 dark:bg-slate-800 px-4 py-2 border-b">
-                <div className="grid grid-cols-4 gap-4 font-medium text-sm text-slate-700 dark:text-slate-300">
-                  {csvData.headers.slice(0, 4).map((header, index) => (
-                    <div key={index} className="truncate">{header}</div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="max-h-48 overflow-y-auto">
-                {csvData.rows.slice(0, 5).map((row, rowIndex) => (
-                  <div key={rowIndex} className="px-4 py-2 border-b last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <div className="grid grid-cols-4 gap-4 text-sm text-slate-600 dark:text-slate-400">
+            <div className="max-h-48 overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {csvData.headers.slice(0, 4).map((header, index) => (
+                      <TableHead key={index}>{header}</TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {csvData.rows.slice(0, 5).map((row, rowIndex) => (
+                    <TableRow key={rowIndex}>
                       {row.slice(0, 4).map((cell, cellIndex) => (
-                        <div key={cellIndex} className="truncate">{cell}</div>
+                        <TableCell key={cellIndex} className="truncate max-w-[12rem]">{cell}</TableCell>
                       ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {csvData.rows.length > 5 && (
-                <div className="bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm text-slate-500 text-center border-t">
-                  ... and {csvData.rows.length - 5} more rows
-                </div>
-              )}
+                    </TableRow>
+                  ))}
+                  {csvData.rows.length > 5 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground">
+                        ... and {csvData.rows.length - 5} more rows
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
             </div>
 
             <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200">

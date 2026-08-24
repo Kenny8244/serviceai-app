@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { Button } from "../ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ShoppingBag, TrendingUp, Users, Package, DollarSign, BarChart3, Settings, LogOut, MessageCircle, AlertCircle, Plus, FileText, Search } from "lucide-react"
-import { BackButton } from "../ui/BackButton"
-import { AIAssistant } from "../ui/AIAssistant"
-import { ProductDrawer } from "../ui/ProductDrawer"
-import { apiService } from "../../services/api"
+import { BackButton } from "@/components/ui/BackButton"
+import { AIAssistant } from "@/components/ai/AIAssistant"
+import { ProductDrawer } from "@/components/product/ProductDrawer"
+import { apiService } from "@/services/api"
 
 interface DashboardStats {
   products: {

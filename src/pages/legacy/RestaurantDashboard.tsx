@@ -1,9 +1,9 @@
 import { useNavigate } from "react-router-dom"
-import { Button } from "../ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { UtensilsCrossed, Clock, Users, ChefHat, TrendingUp, Calendar, Settings, LogOut } from "lucide-react"
-import { BackButton } from "../ui/BackButton"
-import { AIAssistant } from "../ui/AIAssistant"
+import { BackButton } from "@/components/ui/BackButton"
+import { AIAssistant } from "@/components/ai/AIAssistant"
 
 export function RestaurantDashboard() {
   const navigate = useNavigate()

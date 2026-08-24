@@ -1,7 +1,11 @@
 import React, { useState } from 'react'
-import { Button } from './ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Alert, AlertDescription } from './ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { FormField } from '@/components/ui/form-field'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Plus, CheckCircle, X, Edit3 } from 'lucide-react'
 
 interface ManualItem {
@@ -167,94 +171,63 @@ export function ManualDataEntry({ vertical, onItemsAdded }: ManualDataEntryProps
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Name Field */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
+                <FormField label="Name" htmlFor="item-name" required error={errors.name}>
+                  <Input
+                    id="item-name"
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                     placeholder={getPlaceholderText()}
-                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.name ? 'border-red-500' : 'border-slate-300 dark:border-slate-600'
-                    }`}
+                    aria-invalid={Boolean(errors.name)}
                   />
-                  {errors.name && (
-                    <p className="text-sm text-red-600 mt-1">{errors.name}</p>
-                  )}
-                </div>
+                </FormField>
 
-                {/* Description Field */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Description
-                  </label>
-                  <textarea
+                <FormField label="Description" htmlFor="item-description">
+                  <Textarea
+                    id="item-description"
                     value={formData.description}
                     onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                     placeholder="Brief description of the item"
                     rows={3}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                </div>
+                </FormField>
 
-                {/* Price and Quantity Row */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      Price
-                    </label>
-                    <input
+                  <FormField label="Price" htmlFor="item-price" error={errors.price}>
+                    <Input
+                      id="item-price"
                       type="number"
                       step="0.01"
                       min="0"
                       value={formData.price}
                       onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
                       placeholder="0.00"
-                      className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        errors.price ? 'border-red-500' : 'border-slate-300 dark:border-slate-600'
-                      }`}
+                      aria-invalid={Boolean(errors.price)}
                     />
-                    {errors.price && (
-                      <p className="text-sm text-red-600 mt-1">{errors.price}</p>
-                    )}
-                  </div>
+                  </FormField>
 
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      Quantity
-                    </label>
-                    <input
+                  <FormField label="Quantity" htmlFor="item-quantity" error={errors.quantity}>
+                    <Input
+                      id="item-quantity"
                       type="number"
                       min="0"
                       value={formData.quantity}
                       onChange={(e) => setFormData(prev => ({ ...prev, quantity: e.target.value }))}
                       placeholder="0"
-                      className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        errors.quantity ? 'border-red-500' : 'border-slate-300 dark:border-slate-600'
-                      }`}
+                      aria-invalid={Boolean(errors.quantity)}
                     />
-                    {errors.quantity && (
-                      <p className="text-sm text-red-600 mt-1">{errors.quantity}</p>
-                    )}
-                  </div>
+                  </FormField>
                 </div>
 
-                {/* Category Field */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Category
-                  </label>
-                  <input
+                <FormField label="Category" htmlFor="item-category">
+                  <Input
+                    id="item-category"
                     type="text"
                     value={formData.category}
                     onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
                     placeholder={`e.g., ${vertical === 'retail' ? 'Electronics' : vertical === 'restaurant' ? 'Main Course' : 'Category'}`}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                </div>
+                </FormField>
 
                 {/* Form Actions */}
                 <div className="flex space-x-2 pt-4">
@@ -289,50 +262,49 @@ export function ManualDataEntry({ vertical, onItemsAdded }: ManualDataEntryProps
               </span>
             </div>
 
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between p-3 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
-                  onClick={() => handleEdit(item.id)}
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2">
-                      <h4 className="font-medium text-slate-900 dark:text-slate-100">
-                        {item.name}
-                      </h4>
-                      {item.category && (
-                        <span className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full">
-                          {item.category}
-                        </span>
-                      )}
-                    </div>
-
-                    {item.description && (
-                      <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                        {item.description}
-                      </p>
-                    )}
-
-                    <div className="flex items-center space-x-4 mt-2 text-xs text-slate-500">
-                      {item.price && <span>💰 ${item.price}</span>}
-                      {item.quantity && <span>📦 Qty: {item.quantity}</span>}
-                    </div>
-                  </div>
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDelete(item.id)
-                    }}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+            <div className="max-h-64 overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead>Qty</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((item) => (
+                    <TableRow
+                      key={item.id}
+                      className="cursor-pointer"
+                      onClick={() => handleEdit(item.id)}
+                    >
+                      <TableCell>
+                        <div className="font-medium">{item.name}</div>
+                        {item.description ? (
+                          <div className="text-xs text-muted-foreground truncate max-w-xs">{item.description}</div>
+                        ) : null}
+                      </TableCell>
+                      <TableCell>{item.price != null ? `$${item.price}` : '—'}</TableCell>
+                      <TableCell>{item.quantity != null ? item.quantity : '—'}</TableCell>
+                      <TableCell>{item.category || '—'}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDelete(item.id)
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
 
             <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200">

@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button } from './ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Badge } from './ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { FormField as FormControl, nativeSelectClassName } from '@/components/ui/form-field'
 import {
   Activity,
   TrendingUp,
@@ -150,10 +153,10 @@ export function AIHub({ className = "" }: AIHubProps) {
   ]
 
   return (
-    <div className={`min-h-screen bg-slate-50 dark:bg-slate-900 ${className}`}>
+    <div className={className}>
       {/* Header */}
-      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
-        <div className="container mx-auto px-6 py-4">
+      <div className="bg-card border-b border-border -mx-6 px-6">
+        <div className="container mx-auto py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <Button
@@ -171,10 +174,10 @@ export function AIHub({ className = "" }: AIHubProps) {
                   <Bot className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                  <h1 className="text-2xl font-bold text-foreground">
                     AI Hub
                   </h1>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                  <p className="text-sm text-muted-foreground">
                     Centralized AI management and assistance
                   </p>
                 </div>
@@ -199,7 +202,7 @@ export function AIHub({ className = "" }: AIHubProps) {
         </div>
       </div>
 
-      <div className="container mx-auto px-6 py-8">
+      <div className="container mx-auto py-8">
         {/* Tab Navigation */}
         <div className="flex space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg mb-8">
           {tabs.map((tab) => (
@@ -406,18 +409,17 @@ export function AIHub({ className = "" }: AIHubProps) {
 
                 {/* Chat Input */}
                 <div className="flex space-x-2">
-                  <input
+                  <Input
                     type="text"
                     value={chatMessage}
                     onChange={(e) => setChatMessage(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
                     placeholder="Ask me anything about your AI setup..."
-                    className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1"
                   />
                   <Button
                     onClick={handleSendMessage}
                     disabled={!chatMessage.trim()}
-                    className="bg-blue-500 hover:bg-blue-600 text-white"
                   >
                     <Send className="h-4 w-4" />
                   </Button>
@@ -447,30 +449,24 @@ export function AIHub({ className = "" }: AIHubProps) {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-3">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                          What would you like to create?
-                        </label>
-                        <select className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <FormControl label="What would you like to create?" htmlFor="ai-create-type">
+                        <select id="ai-create-type" className={nativeSelectClassName}>
                           <option value="workflow">AI Workflow</option>
                           <option value="form">Service Request Form</option>
                           <option value="service">Service Configuration</option>
                           <option value="report">Analytics Report</option>
                         </select>
-                      </div>
+                      </FormControl>
 
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                          Describe your requirements
-                        </label>
-                        <textarea
+                      <FormControl label="Describe your requirements" htmlFor="ai-create-requirements">
+                        <Textarea
+                          id="ai-create-requirements"
                           rows={4}
                           placeholder="e.g., Create a customer feedback form for our restaurant with questions about food quality, service speed, and overall experience..."
-                          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
-                      </div>
+                      </FormControl>
 
-                      <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white">
+                      <Button className="w-full">
                         <Sparkles className="h-4 w-4 mr-2" />
                         Generate with AI
                       </Button>
@@ -577,7 +573,7 @@ export function AIHub({ className = "" }: AIHubProps) {
                   <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">AI Workflows</h2>
                   <p className="text-slate-600 dark:text-slate-400">Manage automated business processes</p>
                 </div>
-                <Button className="bg-blue-500 hover:bg-blue-600 text-white">
+                <Button>
                   <Plus className="h-4 w-4 mr-2" />
                   Create Workflow
                 </Button>
@@ -654,13 +650,11 @@ export function AIHub({ className = "" }: AIHubProps) {
                     </div>
                     <div className="flex space-x-3">
                       <Button
-                        variant="outline"
                         onClick={() => {
                           setShowFormBuilder(true)
                           setSelectedForm(null)
                           setFormBuilderData({ title: '', description: '', fields: [] })
                         }}
-                        className="bg-green-500 hover:bg-green-600 text-white border-green-500"
                       >
                         <Plus className="h-4 w-4 mr-2" />
                         Create New Form
@@ -683,7 +677,6 @@ export function AIHub({ className = "" }: AIHubProps) {
                             ]
                           })
                         }}
-                        className="bg-blue-500 hover:bg-blue-600 text-white border-blue-500"
                       >
                         <Sparkles className="h-4 w-4 mr-2" />
                         Generate with AI
@@ -825,7 +818,7 @@ export function AIHub({ className = "" }: AIHubProps) {
                         <Eye className="h-4 w-4 mr-2" />
                         Preview
                       </Button>
-                      <Button className="bg-green-500 hover:bg-green-600 text-white">
+                      <Button>
                         <CheckCircle className="h-4 w-4 mr-2" />
                         Publish Form
                       </Button>
@@ -841,31 +834,25 @@ export function AIHub({ className = "" }: AIHubProps) {
                           <CardDescription>Configure your form details</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                              Form Title
-                            </label>
-                            <input
+                          <FormControl label="Form Title" htmlFor="form-title">
+                            <Input
+                              id="form-title"
                               type="text"
                               value={formBuilderData.title}
                               onChange={(e) => setFormBuilderData(prev => ({ ...prev, title: e.target.value }))}
-                              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                               placeholder="Enter form title..."
                             />
-                          </div>
+                          </FormControl>
 
-                          <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                              Description
-                            </label>
-                            <textarea
+                          <FormControl label="Description" htmlFor="form-description">
+                            <Textarea
+                              id="form-description"
                               value={formBuilderData.description}
                               onChange={(e) => setFormBuilderData(prev => ({ ...prev, description: e.target.value }))}
                               rows={3}
-                              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                               placeholder="Describe what this form is for..."
                             />
-                          </div>
+                          </FormControl>
                         </CardContent>
                       </Card>
 
@@ -1087,7 +1074,7 @@ export function AIHub({ className = "" }: AIHubProps) {
                   <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Service Requests</h2>
                   <p className="text-slate-600 dark:text-slate-400">Manage and track service requests</p>
                 </div>
-                <Button className="bg-purple-500 hover:bg-purple-600 text-white">
+                <Button>
                   <Plus className="h-4 w-4 mr-2" />
                   New Request
                 </Button>

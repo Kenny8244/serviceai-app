@@ -1,10 +1,10 @@
 import React from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Button } from './ui/button'
-import { Badge } from './ui/badge'
-import { ThemeToggle } from './ui/ThemeToggle'
-import { getSelectedVertical } from '../lib/verticalStorage'
-import { getVerticalContent } from '../lib/verticalContent'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
+import { getSelectedVertical } from '@/lib/verticalStorage'
+import { getVerticalContent } from '@/lib/verticalContent'
 import {
   LayoutDashboard,
   Package,

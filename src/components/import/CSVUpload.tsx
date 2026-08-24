@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
-import { Button } from './ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Alert, AlertDescription } from './ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Upload, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
-import { onboardingService } from '../services/onboardingService'
-import type { CSVAnalysisResponse } from '../services/onboardingService'
+import { onboardingService } from '@/services/onboardingService'
+import type { CSVAnalysisResponse } from '@/services/onboardingService'
 
 interface CSVUploadProps {
   onAnalysisComplete?: (analysis: CSVAnalysisResponse) => void
@@ -141,7 +141,6 @@ export function CSVUpload({ onAnalysisComplete, onSkip }: CSVUploadProps) {
             <Button
               onClick={handleUpload}
               disabled={!selectedFile || isUploading}
-              className="bg-blue-600 hover:bg-blue-700"
             >
               {isUploading ? (
                 <>

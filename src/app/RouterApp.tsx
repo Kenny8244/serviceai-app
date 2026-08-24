@@ -1,17 +1,22 @@
 "use client"
 
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom"
-import { AuthPage, VerticalSelectionPage, TestAISearchPage, NotFoundPage } from "./components/pages"
-import { OnboardingConfirmation } from "./components/SimpleOnboarding"
-import { Dashboard } from "./components/Dashboard"
-import { Settings } from "./components/Settings"
-import { AIHub } from "./components/AIHub"
-import { Analytics } from "./components/Analytics"
-import { TeamManagement } from "./components/TeamManagement"
-import { AppLayout } from "./components/AppLayout"
-import AssetsPage from "./pages/AssetsPage"
-import { ThemeProvider } from "./lib/theme"
-import { getSelectedVertical, setSelectedVertical, hasSelectedVertical } from "./lib/verticalStorage"
+import {
+  AuthPage,
+  VerticalSelectionPage,
+  TestAISearchPage,
+  NotFoundPage,
+  OnboardingConfirmation,
+  Dashboard,
+  Settings,
+  AIHub,
+  Analytics,
+  TeamManagement,
+  AssetsPage,
+} from "@/pages"
+import { AppLayout } from "@/components/layout/AppLayout"
+import { ThemeProvider } from "@/lib/theme"
+import { getSelectedVertical, setSelectedVertical, hasSelectedVertical } from "@/lib/verticalStorage"
 
 function VerticalRoute() {
   const navigate = useNavigate()

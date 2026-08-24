@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Button } from './ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Badge } from './ui/badge'
-import { ThemeToggle } from './ui/ThemeToggle'
-import { getSelectedVertical } from '../lib/verticalStorage'
-import { getVerticalDisplayName } from '../lib/verticalContent'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { FormField, nativeSelectClassName } from '@/components/ui/form-field'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
+import { getSelectedVertical } from '@/lib/verticalStorage'
+import { getVerticalDisplayName } from '@/lib/verticalContent'
 import {
   Settings as SettingsIcon,
   Bot,
@@ -123,33 +125,28 @@ export function Settings() {
         <div className="space-y-6">
           {/* Company Info */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Company Name
-              </label>
-              <input
+            <FormField label="Company Name" htmlFor="companyName">
+              <Input
+                id="companyName"
                 type="text"
                 value={settings.companyName}
                 onChange={(e) => setSettings(prev => ({ ...prev, companyName: e.target.value }))}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-            </div>
+            </FormField>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Timezone
-              </label>
+            <FormField label="Timezone" htmlFor="timezone">
               <select
+                id="timezone"
                 value={settings.timezone}
                 onChange={(e) => setSettings(prev => ({ ...prev, timezone: e.target.value }))}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={nativeSelectClassName}
               >
                 <option value="America/New_York">Eastern Time</option>
                 <option value="America/Chicago">Central Time</option>
                 <option value="America/Denver">Mountain Time</option>
                 <option value="America/Los_Angeles">Pacific Time</option>
               </select>
-            </div>
+            </FormField>
           </div>
 
           <div className="flex items-center justify-between p-4 border border-slate-200 dark:border-slate-700 rounded-lg">
@@ -206,14 +203,14 @@ export function Settings() {
           {/* AI Search Box */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
+            <Input
               type="text"
               placeholder="Search AI settings, workflows, or ask for help..."
-              className="w-full pl-10 pr-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800"
+              className="pl-10 pr-24 py-3 h-auto"
             />
             <Button
               size="sm"
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-blue-500 hover:bg-blue-600 text-white"
+              className="absolute right-2 top-1/2 transform -translate-y-1/2"
             >
               Ask AI
             </Button>
@@ -420,36 +417,30 @@ export function Settings() {
       content: (
         <div className="space-y-6">
           {/* Default View */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Default Dashboard View
-            </label>
+          <FormField label="Default Dashboard View" htmlFor="defaultView">
             <select
+              id="defaultView"
               value={settings.defaultView}
               onChange={(e) => setSettings(prev => ({ ...prev, defaultView: e.target.value }))}
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={nativeSelectClassName}
             >
               <option value="overview">Overview</option>
               <option value="analytics">Analytics</option>
               <option value="inventory">Inventory</option>
               <option value="team">Team</option>
             </select>
-          </div>
+          </FormField>
 
-          {/* Refresh Interval */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Auto Refresh Interval (seconds)
-            </label>
-            <input
+          <FormField label="Auto Refresh Interval (seconds)" htmlFor="refreshInterval">
+            <Input
+              id="refreshInterval"
               type="number"
               min="60"
               max="3600"
               value={settings.refreshInterval}
               onChange={(e) => setSettings(prev => ({ ...prev, refreshInterval: parseInt(e.target.value) }))}
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-          </div>
+          </FormField>
 
           {/* Show Tips */}
           <div className="flex items-center justify-between p-4 border border-slate-200 dark:border-slate-700 rounded-lg">
@@ -504,19 +495,16 @@ export function Settings() {
           </div>
 
           {/* Stock Threshold */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Low Stock Threshold: {settings.stockThreshold} items
-            </label>
-            <input
+          <FormField label={`Low Stock Threshold: ${settings.stockThreshold} items`} htmlFor="stockThreshold">
+            <Input
+              id="stockThreshold"
               type="number"
               min="1"
               max="100"
               value={settings.stockThreshold}
               onChange={(e) => setSettings(prev => ({ ...prev, stockThreshold: parseInt(e.target.value) }))}
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-          </div>
+          </FormField>
         </div>
       )
     },
@@ -557,19 +545,16 @@ export function Settings() {
           </div>
 
           {/* Max Team Size */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Maximum Team Size: {settings.maxTeamSize} members
-            </label>
-            <input
+          <FormField label={`Maximum Team Size: ${settings.maxTeamSize} members`} htmlFor="maxTeamSize">
+            <Input
+              id="maxTeamSize"
               type="number"
               min="1"
               max="1000"
               value={settings.maxTeamSize}
               onChange={(e) => setSettings(prev => ({ ...prev, maxTeamSize: parseInt(e.target.value) }))}
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-          </div>
+          </FormField>
 
           {/* Team Communication */}
           <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-lg">
@@ -635,10 +620,10 @@ export function Settings() {
   ]
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+    <div>
       {/* Header */}
-      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
-        <div className="container mx-auto px-6 py-4">
+      <div className="bg-card border-b border-border -mx-6 px-6">
+        <div className="container mx-auto py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <Button
@@ -651,12 +636,12 @@ export function Settings() {
                 <span>Back to Dashboard</span>
               </Button>
               <div className="w-px h-6 bg-slate-300 dark:bg-slate-600"></div>
-              <SettingsIcon className="h-6 w-6 text-slate-600 dark:text-slate-400" />
+              <SettingsIcon className="h-6 w-6 text-muted-foreground" />
               <div>
-                <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
+                <h1 className="text-xl font-semibold text-foreground">
                   Settings
                 </h1>
-                <p className="text-sm text-slate-600 dark:text-slate-400">
+                <p className="text-sm text-muted-foreground">
                   Configure your ServiceAI experience
                 </p>
               </div>
@@ -667,7 +652,7 @@ export function Settings() {
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Reset
               </Button>
-              <Button onClick={handleSave} className="bg-blue-500 hover:bg-blue-600 text-white">
+              <Button onClick={handleSave}>
                 <Save className="h-4 w-4 mr-2" />
                 Save Changes
               </Button>
@@ -676,7 +661,7 @@ export function Settings() {
         </div>
       </div>
 
-      <div className="container mx-auto px-6 py-8">
+      <div className="container mx-auto py-8">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Sidebar Navigation */}
           <div className="lg:col-span-1">

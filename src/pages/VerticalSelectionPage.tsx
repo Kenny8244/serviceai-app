@@ -1,7 +1,7 @@
 import React, { useState } from "react"
-import { Button } from "../ui/button"
+import { Button } from "@/components/ui/button"
 import { Sparkles, ArrowRight, Store, UtensilsCrossed, ShoppingBag, Building2, Check } from "lucide-react"
-import { ThemeToggle } from "../ui/ThemeToggle"
+import { ThemeToggle } from "@/components/ui/ThemeToggle"
 
 interface Vertical {
   id: string
