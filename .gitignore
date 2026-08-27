@@ -30,3 +30,13 @@ dist/
 .env.production
 *.log
 .DS_Store
+
+# Local-only agent project brief
+AGENTS.md
+
+# Local-only project skill (Jira recommender)
+.cursor/skills/what-next/
+
+# Local-only Jarvis orchestrator
+.cursor/skills/jarvis/
+

@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name=serviceai-app",
+    "deploy:preview": "wrangler pages deploy dist --project-name=serviceai-app --branch=preview",
+    "deploy:api": "npm run deploy --prefix worker",
+    "deploy:all": "npm run deploy:api && npm run deploy"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.13",
@@ -23,6 +27,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
+    "@types/node": "^26.3.0",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.3",

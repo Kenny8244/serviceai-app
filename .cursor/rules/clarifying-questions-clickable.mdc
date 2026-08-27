@@ -1,0 +1,14 @@
+---
+description: >-
+  Clarifying questions require Plan mode first, then clickable AskQuestion only.
+alwaysApply: true
+---
+
+# Clarifying questions = Plan mode + clickable only
+
+When the user asks to «задай уточняющие вопросы», «уточняющие вопросы», «ask clarifying questions», or similar:
+
+1. **Switch to Plan mode first** (`SwitchMode` → `plan`).
+2. Ask only via **AskQuestion** (clickable options), 1–2 per round.
+3. No freeform question walls in Agent chat.
+4. If AskQuestion is still missing after Plan: say so once, then at most 1–2 A/B/C in chat.

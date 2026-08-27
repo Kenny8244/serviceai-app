@@ -1,15 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { LoadingState } from '@/components/ui/loading-state'
 import { PageShell } from '@/components/layout/PageShell'
 import { PageTabs } from '@/components/layout/PageTabs'
 import { GradientIcon } from '@/components/layout/GradientIcon'
+import { toUserMessage } from '@/lib/userFacingError'
 import { apiService } from '@/services/api'
-import type { TeamMember, ServiceTicket } from '@/services/api'
+import type { ServiceRequest, TeamMember, ServiceTicket } from '@/services/api'
 import {
   Users,
   UserPlus,
@@ -28,12 +32,28 @@ import {
   AlertCircle,
   Award,
   Brain,
+  Inbox,
   Route,
   Target,
   ArrowUpRight,
   DollarSign,
   BarChart3
 } from 'lucide-react'
+
+function mapRequestToTicket(request: ServiceRequest): ServiceTicket {
+  return {
+    id: request.id,
+    title: request.title,
+    status: request.status,
+    priority: request.priority,
+    assignee: 'Unassigned',
+    createdBy: request.userId,
+    createdAt: request.createdAt,
+    updatedAt: request.updatedAt,
+    messages: 0,
+    lastMessage: request.description,
+  }
+}
 
 export function TeamManagement() {
   const navigate = useNavigate()
@@ -43,73 +63,37 @@ export function TeamManagement() {
   const [serviceTickets, setServiceTickets] = useState<ServiceTicket[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [ticketsLoading, setTicketsLoading] = useState(true)
+  const [ticketsError, setTicketsError] = useState<string | null>(null)
 
-  // Load data from API
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true)
-        setError(null)
+  const loadTickets = useCallback(async () => {
+    try {
+      setTicketsLoading(true)
+      setTicketsError(null)
+      const { serviceRequests } = await apiService.getServiceRequests()
+      setServiceTickets(serviceRequests.map(mapRequestToTicket))
+    } catch (err) {
+      setTicketsError(toUserMessage(err))
+      setServiceTickets([])
+    } finally {
+      setTicketsLoading(false)
+    }
+  }, [])
 
-        // Load team members and service tickets
-        const [teamResponse, ticketsResponse] = await Promise.all([
-          apiService.getTeamMembers(),
-          // For now, we'll use mock tickets data until we implement the service tickets API
-          Promise.resolve({
-            serviceTickets: [
-              {
-                id: '1',
-                title: 'Customer unable to access dashboard',
-                status: 'in_progress' as const,
-                priority: 'high' as const,
-                assignee: 'Sarah Johnson',
-                createdBy: 'John Doe',
-                createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-                updatedAt: new Date(Date.now() - 30 * 60 * 1000),
-                messages: 5,
-                lastMessage: 'I\'m investigating the login issue...'
-              },
-              {
-                id: '2',
-                title: 'Feature request: Dark mode toggle',
-                status: 'open' as const,
-                priority: 'medium' as const,
-                assignee: 'Mike Chen',
-                createdBy: 'Jane Smith',
-                createdAt: new Date(Date.now() - 4 * 60 * 60 * 1000),
-                updatedAt: new Date(Date.now() - 3 * 60 * 60 * 1000),
-                messages: 3,
-                lastMessage: 'This would be a great addition to improve UX'
-              },
-              {
-                id: '3',
-                title: 'Bug: Form submission error',
-                status: 'resolved' as const,
-                priority: 'urgent' as const,
-                assignee: 'Emily Davis',
-                createdBy: 'Bob Wilson',
-                createdAt: new Date(Date.now() - 6 * 60 * 60 * 1000),
-                updatedAt: new Date(Date.now() - 1 * 60 * 60 * 1000),
-                messages: 8,
-                lastMessage: 'Issue resolved - validation was too strict'
-              }
-            ]
-          })
-        ])
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
 
-        setTeamMembers(teamResponse.teamMembers.map(member => ({
-          ...member,
-          joinDate: new Date(member.joinDate),
-          lastActive: new Date(member.lastActive)
-        })) || [])
-        setServiceTickets(ticketsResponse.serviceTickets.map(ticket => ({
-          ...ticket,
-          createdAt: new Date(ticket.createdAt),
-          updatedAt: new Date(ticket.updatedAt)
-        })))
-      } catch (err) {
+      const teamResponse = await apiService.getTeamMembers()
+      setTeamMembers(teamResponse.teamMembers.map(member => ({
+        ...member,
+        joinDate: new Date(member.joinDate),
+        lastActive: new Date(member.lastActive)
+      })) || [])
+    } catch (err) {
         console.error('Error loading data:', err)
-        setError('Failed to load data from server')
+        setError(toUserMessage(err))
         // Fallback to mock data on error
         setTeamMembers([
           {
@@ -184,10 +168,12 @@ export function TeamManagement() {
       } finally {
         setLoading(false)
       }
-    }
-
-    loadData()
   }, [])
+
+  useEffect(() => {
+    loadData()
+    loadTickets()
+  }, [loadData, loadTickets])
 
   const filteredMembers = teamMembers.filter(member =>
     member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -219,12 +205,7 @@ export function TeamManagement() {
   if (loading) {
     return (
       <PageShell {...teamHeader}>
-        <div className="flex items-center justify-center py-24">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Loading team data...</p>
-          </div>
-        </div>
+        <LoadingState label="Loading team data…" className="py-24" />
       </PageShell>
     )
   }
@@ -232,18 +213,11 @@ export function TeamManagement() {
   if (error && teamMembers.length === 0) {
     return (
       <PageShell {...teamHeader}>
-        <div className="flex items-center justify-center py-24">
-          <Card className="w-full max-w-md">
-            <CardContent className="p-6 text-center">
-              <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">Error Loading Data</h3>
-              <p className="text-muted-foreground mb-4">{error}</p>
-              <Button onClick={() => window.location.reload()}>
-                Retry
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+        <ErrorState
+          title="Couldn't load team data"
+          message={error}
+          onRetry={loadData}
+        />
       </PageShell>
     )
   }
@@ -542,6 +516,21 @@ export function TeamManagement() {
               </div>
 
               {/* Tickets List */}
+              {ticketsLoading ? (
+                <LoadingState label="Loading service requests…" />
+              ) : ticketsError ? (
+                <ErrorState
+                  title="Couldn't load service requests"
+                  message={ticketsError}
+                  onRetry={loadTickets}
+                />
+              ) : serviceTickets.length === 0 ? (
+                <EmptyState
+                  icon={<Inbox className="h-6 w-6 text-slate-500" />}
+                  title="No service requests yet"
+                  description="When your team files a request, it will show up here."
+                />
+              ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -554,14 +543,7 @@ export function TeamManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {serviceTickets.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground">
-                        No service tickets yet
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    serviceTickets.map((ticket) => {
+                    {serviceTickets.map((ticket) => {
                       const availableMembers = teamMembers.filter(member =>
                         member.status === 'online' && member.role !== 'guest'
                       )
@@ -635,10 +617,10 @@ export function TeamManagement() {
                           </TableCell>
                         </TableRow>
                       )
-                    })
-                  )}
+                    })}
                 </TableBody>
               </Table>
+              )}
             </div>
           )}
 

@@ -1,10 +1,14 @@
 import React, { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Upload, FileText, CheckCircle, AlertCircle, X, Sheet, Edit3 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { LoadingState } from '@/components/ui/loading-state'
+import { SuccessBanner } from '@/components/ui/success-banner'
+import { Upload, FileText, CheckCircle, X, Sheet, Edit3 } from 'lucide-react'
 import { googleSheetsService, loadGoogleAPIs, type GoogleSheet } from '@/services/googleSheetsService'
+import { toUserMessage } from '@/lib/userFacingError'
 import { ManualDataEntry } from './ManualDataEntry'
 
 interface CSVData {
@@ -120,7 +124,7 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
       setCsvData(csvData)
       onDataImported?.(csvData)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to parse CSV file')
+      setError(toUserMessage(err) || 'We could not read that CSV file. Please try another file.')
     } finally {
       setLoading(false)
     }
@@ -138,7 +142,7 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
         await loadSpreadsheets()
       }
     } catch (error) {
-      setSheetsError('Failed to sign in to Google')
+      setSheetsError(toUserMessage(error))
       console.error('Google sign in error:', error)
     } finally {
       setSheetsLoading(false)
@@ -153,7 +157,7 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
       const sheets = await googleSheetsService.getSpreadsheets()
       setSpreadsheets(sheets)
     } catch (error) {
-      setSheetsError('Failed to load spreadsheets')
+      setSheetsError(toUserMessage(error))
       console.error('Load spreadsheets error:', error)
     } finally {
       setSheetsLoading(false)
@@ -173,7 +177,7 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
       setCsvData(csvData)
       onDataImported?.(csvData)
     } catch (error) {
-      setSheetsError('Failed to load sheet data')
+      setSheetsError(toUserMessage(error))
       console.error('Load sheet data error:', error)
     } finally {
       setSheetsLoading(false)
@@ -302,23 +306,16 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
               )}
             </div>
 
-            {/* Loading State */}
             {loading && (
-              <Alert>
-                <AlertDescription>
-                  Processing your CSV file...
-                </AlertDescription>
-              </Alert>
+              <LoadingState label="Processing your CSV file…" className="py-8" />
             )}
 
-            {/* Error State */}
             {error && (
-              <Alert className="border-red-200 bg-red-50 dark:bg-red-900/20">
-                <AlertCircle className="h-4 w-4 text-red-600" />
-                <AlertDescription className="text-red-800 dark:text-red-200">
-                  {error}
-                </AlertDescription>
-              </Alert>
+              <ErrorState
+                title="Could not import that file"
+                message={error}
+                className="py-6"
+              />
             )}
           </>
         )}
@@ -346,10 +343,7 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
                 </div>
 
                 {sheetsLoading ? (
-                  <div className="text-center py-8">
-                    <div className="animate-spin h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">Loading spreadsheets...</p>
-                  </div>
+                  <LoadingState label="Loading spreadsheets…" className="py-8" />
                 ) : spreadsheets.length > 0 ? (
                   <div className="space-y-2 max-h-48 overflow-y-auto">
                     {spreadsheets.map((sheet) => (
@@ -379,18 +373,21 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-slate-500">
-                    No spreadsheets found. Create a spreadsheet in Google Sheets first.
-                  </div>
+                  <EmptyState
+                    icon={<Sheet className="h-6 w-6 text-slate-500" />}
+                    title="No spreadsheets found"
+                    description="Create a spreadsheet in Google Sheets first, then refresh this list."
+                    className="py-8"
+                  />
                 )}
 
                 {sheetsError && (
-                  <Alert className="border-red-200 bg-red-50 dark:bg-red-900/20">
-                    <AlertCircle className="h-4 w-4 text-red-600" />
-                    <AlertDescription className="text-red-800 dark:text-red-200">
-                      {sheetsError}
-                    </AlertDescription>
-                  </Alert>
+                  <ErrorState
+                    title="Could not load Google Sheets"
+                    message={sheetsError}
+                    onRetry={loadSpreadsheets}
+                    className="py-6"
+                  />
                 )}
               </div>
             )}
@@ -465,12 +462,9 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
               </Table>
             </div>
 
-            <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <AlertDescription className="text-green-800 dark:text-green-200">
-                {csvData.source === 'google-sheets' ? 'Google Sheets data' : csvData.source === 'manual' ? 'Manual entry data' : 'CSV file'} processed successfully! Ready to import {csvData.rows.length} items.
-              </AlertDescription>
-            </Alert>
+            <SuccessBanner>
+              {csvData.source === 'google-sheets' ? 'Google Sheets data' : csvData.source === 'manual' ? 'Manual entry data' : 'CSV file'} processed successfully. Ready to import {csvData.rows.length} items.
+            </SuccessBanner>
           </div>
         )}
 

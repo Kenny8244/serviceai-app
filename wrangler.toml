@@ -1,0 +1,4 @@
+# Cloudflare Pages — free static hosting for the Vite SPA
+name = "serviceai-app"
+compatibility_date = "2026-08-25"
+pages_build_output_dir = "dist"

@@ -6,11 +6,14 @@ import { Badge } from '@/components/ui/badge'
 import { PageShell } from '@/components/layout/PageShell'
 import { GradientIcon } from '@/components/layout/GradientIcon'
 import { DataImport } from '@/components/import/DataImport'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { LoadingState, SkeletonBlock } from '@/components/ui/loading-state'
 import { getSelectedVertical } from '@/lib/verticalStorage'
 import { getVerticalContent } from '@/lib/verticalContent'
+import { toUserMessage } from '@/lib/userFacingError'
 import { apiService, type DashboardOverview, type DashboardStat } from '@/services/api'
 import {
-  AlertCircle,
   AlertTriangle,
   BarChart3,
   Building2,
@@ -68,10 +71,10 @@ function MetricCardSkeleton() {
       <CardContent className="p-6">
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-2 flex-1">
-            <div className="h-4 w-24 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-            <div className="h-7 w-16 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+            <SkeletonBlock className="h-4 w-24" />
+            <SkeletonBlock className="h-7 w-16" />
           </div>
-          <div className="w-8 h-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+          <SkeletonBlock className="w-8 h-8" />
         </div>
       </CardContent>
     </Card>
@@ -97,8 +100,8 @@ export function Dashboard() {
       setError(null)
       const data = await apiService.getDashboardOverview(selectedVertical)
       setOverview(data)
-    } catch {
-      setError('Failed to load dashboard data')
+    } catch (err) {
+      setError(toUserMessage(err))
       setOverview(null)
     } finally {
       setLoading(false)
@@ -143,42 +146,39 @@ export function Dashboard() {
         </div>
 
         {loading && (
-          <>
+          <LoadingState variant="skeleton" label="Loading dashboard" className="mb-8">
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
               {Array.from({ length: 4 }).map((_, index) => (
                 <MetricCardSkeleton key={index} />
               ))}
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardContent className="p-6 space-y-3">
-                  <div className="h-5 w-40 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-                  <div className="h-4 w-full bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-                  <div className="h-4 w-2/3 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+                  <SkeletonBlock className="h-5 w-40" />
+                  <SkeletonBlock className="h-4 w-full" />
+                  <SkeletonBlock className="h-4 w-2/3" />
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-6 space-y-3">
-                  <div className="h-5 w-48 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-                  <div className="h-4 w-full bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-                  <div className="h-4 w-3/4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+                  <SkeletonBlock className="h-5 w-48" />
+                  <SkeletonBlock className="h-4 w-full" />
+                  <SkeletonBlock className="h-4 w-3/4" />
                 </CardContent>
               </Card>
             </div>
-          </>
+          </LoadingState>
         )}
 
         {error && !loading && (
           <Card className="mb-8">
-            <CardContent className="p-6 text-center">
-              <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
-                Error Loading Dashboard
-              </h3>
-              <p className="text-slate-600 dark:text-slate-400 mb-4">{error}</p>
-              <Button onClick={loadOverview}>
-                Retry
-              </Button>
+            <CardContent className="p-6">
+              <ErrorState
+                title="Couldn't load the dashboard"
+                message={error}
+                onRetry={loadOverview}
+              />
             </CardContent>
           </Card>
         )}
@@ -201,15 +201,12 @@ export function Dashboard() {
                 </CardHeader>
                 <CardContent>
                   {overview.activities.length === 0 ? (
-                    <div className="flex flex-col items-center text-center py-8 px-4">
-                      <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
-                        <Inbox className="h-6 w-6 text-slate-500" />
-                      </div>
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">No recent activity yet</p>
-                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-sm">
-                        Import data or create a service request to see updates here.
-                      </p>
-                    </div>
+                    <EmptyState
+                      icon={<Inbox className="h-6 w-6 text-slate-500" />}
+                      title="No recent activity yet"
+                      description="Import data or create a service request to see updates here."
+                      className="py-8"
+                    />
                   ) : (
                     <div className="space-y-4">
                       {overview.activities.map((item) => (
@@ -253,12 +250,11 @@ export function Dashboard() {
                       </p>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center text-center py-8 px-4">
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">No recommendations yet</p>
-                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                        Recommendations will appear as your workspace collects data.
-                      </p>
-                    </div>
+                    <EmptyState
+                      title="No recommendations yet"
+                      description="Recommendations will appear as your workspace collects data."
+                      className="py-8"
+                    />
                   )}
                 </CardContent>
               </Card>

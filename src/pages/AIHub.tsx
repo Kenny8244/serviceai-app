@@ -22,30 +22,23 @@ import {
   FileText,
   Workflow,
   Ticket,
-  ArrowUpRight,
-  ArrowDownRight,
-  Minus,
   Trash2,
   Copy,
   GripVertical,
   Type,
   Mail,
-  Phone,
   CheckSquare,
   AlignLeft,
   Edit3,
   Plus,
   CheckCircle,
   AlertCircle,
-  Code,
-  Shield,
   Bot,
   MessageSquare,
   Send,
   ArrowLeft,
   Settings,
   Sparkles,
-  Loader2,
   Info,
   Hash,
   Lightbulb,
@@ -823,7 +816,7 @@ export function AIHub({ className = "" }: AIHubProps) {
                         </CardHeader>
                         <CardContent>
                           <div className="space-y-3">
-                            {formBuilderData.fields.map((field, index) => (
+                            {formBuilderData.fields.map((field) => (
                               <div key={field.id} className="flex items-center space-x-3 p-3 border border-slate-200 dark:border-slate-700 rounded-lg">
                                 <GripVertical className="h-4 w-4 text-slate-400 cursor-move" />
                                 <div className="flex-1">

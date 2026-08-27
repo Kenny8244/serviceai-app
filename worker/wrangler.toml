@@ -1,0 +1,12 @@
+name = "serviceai-api"
+main = "src/index.ts"
+compatibility_date = "2026-08-25"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+FRONTEND_URL = "https://serviceai-app.pages.dev"
+
+[[kv_namespaces]]
+binding = "DEMO_KV"
+preview_id = "535cc14546a84aa48b879ad121f96d75"
+id = "75852e0cb47846cfbb44af893fa8c2f2"

@@ -1,128 +1,119 @@
-import React, { useState } from 'react';
-import { Search, Plus, Package } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { PageShell } from '@/components/layout/PageShell';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Package, Plus, Search } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { LoadingState, SkeletonBlock } from '@/components/ui/loading-state'
+import { PageShell } from '@/components/layout/PageShell'
+import { getSelectedVertical } from '@/lib/verticalStorage'
+import { getVerticalContent } from '@/lib/verticalContent'
+import { toUserMessage } from '@/lib/userFacingError'
+import { apiService, type Asset } from '@/services/api'
 
-interface Asset {
-  id: string;
-  name: string;
-  status: 'ACTIVE' | 'INACTIVE' | 'DAMAGED' | 'MAINTENANCE' | 'LOST';
-  serialNumber: string;
-  manufacturer: string;
-  model: string;
-  modelId: string;
-  location: string;
-  lastSeen: string;
-  warrantyContract: string;
-  warrantyExpiration: string;
-  category: string;
-  type: string;
+type StockStatus = 'ACTIVE' | 'LOW' | 'OUT'
+
+function getStockStatus(asset: Asset): StockStatus {
+  if (asset.quantity <= 0) return 'OUT'
+  if (asset.quantity <= asset.minQuantity) return 'LOW'
+  return 'ACTIVE'
 }
 
-interface Category {
-  id: string;
-  name: string;
-  count: number;
-  children?: Category[];
+function formatCurrency(value: number | null): string {
+  if (value == null || Number.isNaN(value)) return '—'
+  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(value)
 }
 
-const AssetsPage: React.FC = () => {
-  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+function formatDate(value: string): string {
+  if (!value) return '—'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString()
+}
 
-  // Mock data - replace with API calls
-  const categories: Category[] = [
-    {
-      id: 'it-hardware',
-      name: 'IT Hardware',
-      count: 0,
-      children: [
-        { id: 'laptops', name: 'Laptops', count: 36 },
-        { id: 'monitors', name: 'Monitors', count: 24 },
-        { id: 'phones', name: 'Phones', count: 15 },
-      ],
-    },
-    {
-      id: 'office-assets',
-      name: 'Office assets',
-      count: 0,
-      children: [
-        { id: 'desk-chairs', name: 'Desk chairs', count: 12 },
-      ],
-    },
-  ];
+function AssetsPage() {
+  const vertical = getVerticalContent(getSelectedVertical())
+  const [assets, setAssets] = useState<Asset[]>([])
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  // Mock assets data
-  const assets: Asset[] = [
-    {
-      id: 'LTMB022101',
-      name: 'LTMB022101',
-      status: 'DAMAGED',
-      serialNumber: 'C03C28IKLVDN',
-      manufacturer: 'Apple',
-      model: 'MacBook Pro 16-inch (2019)',
-      modelId: 'MacBook Pro MNQG2LL',
-      location: 'Home office - US',
-      lastSeen: '2025-12-15',
-      warrantyContract: 'Extended Warranty Services - MacBook',
-      warrantyExpiration: '2024-12-31',
-      category: 'it-hardware',
-      type: 'laptops',
-    },
-    // Add more mock assets as needed
-  ];
+  const loadAssets = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const data = await apiService.getAssets()
+      setAssets(data)
+      setSelectedAssetId((current) => {
+        if (current && data.some((asset) => asset.id === current)) return current
+        return data[0]?.id ?? null
+      })
+    } catch (err) {
+      setError(toUserMessage(err))
+      setAssets([])
+      setSelectedAssetId(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-  const getStatusBadgeVariant = (status: string) => {
+  useEffect(() => {
+    loadAssets()
+  }, [loadAssets])
+
+  const categories = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const asset of assets) {
+      const key = asset.category || 'Uncategorized'
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    return Array.from(counts.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, count]) => ({ id: name, name, count }))
+  }, [assets])
+
+  const filteredAssets = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    return assets.filter((asset) => {
+      if (selectedCategory && asset.category !== selectedCategory) return false
+      if (!query) return true
+      return [asset.name, asset.sku, asset.category, asset.supplier, asset.location]
+        .some((value) => (value ?? '').toLowerCase().includes(query))
+    })
+  }, [assets, searchQuery, selectedCategory])
+
+  const selectedAsset = filteredAssets.find((asset) => asset.id === selectedAssetId)
+    ?? assets.find((asset) => asset.id === selectedAssetId)
+    ?? null
+
+  const getStatusBadgeVariant = (status: StockStatus) => {
     switch (status) {
       case 'ACTIVE':
-        return 'default';
-      case 'DAMAGED':
-        return 'destructive';
-      case 'MAINTENANCE':
-        return 'secondary';
-      case 'LOST':
-        return 'outline';
-      default:
-        return 'secondary';
+        return 'default' as const
+      case 'LOW':
+        return 'secondary' as const
+      case 'OUT':
+        return 'destructive' as const
     }
-  };
-
-  const filteredAssets = assets.filter((asset) => {
-    const query = searchQuery.trim().toLowerCase()
-    if (!query) return true
-    return [asset.id, asset.name, asset.model, asset.manufacturer, asset.serialNumber]
-      .some((value) => value.toLowerCase().includes(query))
-  })
-
-  const renderCategoryTree = (category: Category, level = 0) => (
-    <div key={category.id} className="mb-1">
-      <div 
-        className={`flex items-center py-1 px-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer ${level === 0 ? 'font-medium' : 'pl-6'}`}
-      >
-        <span className="flex-1">{category.name}</span>
-        <span className="text-xs text-slate-500 dark:text-slate-400">{category.count}</span>
-      </div>
-      {category.children?.map(child => renderCategoryTree(child, level + 1))}
-    </div>
-  );
+  }
 
   return (
     <PageShell
       flush
-      title="Objects"
+      title={vertical.navAssetsLabel}
       actions={
         <>
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
             <Input
               type="search"
-              placeholder="Search assets..."
+              placeholder={`Search ${vertical.navAssetsLabel.toLowerCase()}...`}
               className="pl-8 w-[300px]"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(event) => setSearchQuery(event.target.value)}
             />
           </div>
           <Button disabled title="Coming soon">
@@ -132,145 +123,174 @@ const AssetsPage: React.FC = () => {
         </>
       }
     >
-    <div className="flex flex-1 min-h-0 bg-slate-50 dark:bg-slate-900">
-      {/* Schema Tree Sidebar */}
-      <div className="w-64 border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 overflow-y-auto">
-        <h2 className="font-semibold text-lg mb-4">Schema Tree</h2>
-        <div className="space-y-1">
-          {categories.map(category => renderCategoryTree(category))}
+      <div className="flex flex-1 min-h-0 bg-slate-50 dark:bg-slate-900">
+        <div className="w-64 border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 overflow-y-auto">
+          <h2 className="font-semibold text-lg mb-4">Categories</h2>
+          <button
+            type="button"
+            onClick={() => setSelectedCategory(null)}
+            className={`flex w-full items-center py-1 px-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700 ${
+              selectedCategory === null ? 'bg-slate-100 dark:bg-slate-700 font-medium' : ''
+            }`}
+          >
+            <span className="flex-1 text-left">All</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">{assets.length}</span>
+          </button>
+          {categories.map((category) => (
+            <button
+              key={category.id}
+              type="button"
+              onClick={() => setSelectedCategory(category.id)}
+              className={`flex w-full items-center py-1 px-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700 ${
+                selectedCategory === category.id ? 'bg-slate-100 dark:bg-slate-700 font-medium' : ''
+              }`}
+            >
+              <span className="flex-1 text-left">{category.name}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{category.count}</span>
+            </button>
+          ))}
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex flex-1 overflow-hidden">
-          {/* Asset List */}
-          <div className="w-1/3 border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-y-auto">
-            <div className="p-2 space-y-1">
-              {filteredAssets.length === 0 ? (
-                <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
-                  No assets match this search.
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex flex-1 overflow-hidden">
+            <div className="w-1/3 border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-y-auto">
+              <div className="p-2 space-y-1">
+                {loading ? (
+                  <LoadingState variant="skeleton" label="Loading assets" className="space-y-2 p-2">
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <div key={index} className="p-3 space-y-2">
+                        <SkeletonBlock className="h-4 w-2/3" />
+                        <SkeletonBlock className="h-3 w-1/2" />
+                      </div>
+                    ))}
+                  </LoadingState>
+                ) : error ? (
+                  <ErrorState
+                    title="Couldn't load assets"
+                    message={error}
+                    onRetry={loadAssets}
+                    className="py-10"
+                  />
+                ) : assets.length === 0 ? (
+                  <EmptyState
+                    icon={<Package className="h-6 w-6 text-slate-500" />}
+                    title="No assets yet"
+                    description="Imported or created items will show up here."
+                    className="py-10"
+                  />
+                ) : filteredAssets.length === 0 ? (
+                  <EmptyState
+                    title="No assets match this search"
+                    description="Try a different name, SKU, or category."
+                    className="py-10"
+                  />
+                ) : (
+                  filteredAssets.map((asset) => {
+                    const status = getStockStatus(asset)
+                    return (
+                      <button
+                        type="button"
+                        key={asset.id}
+                        className={`w-full text-left p-3 rounded hover:bg-slate-100 dark:hover:bg-slate-700 ${
+                          selectedAsset?.id === asset.id ? 'bg-slate-100 dark:bg-slate-700' : ''
+                        }`}
+                        onClick={() => setSelectedAssetId(asset.id)}
+                      >
+                        <div className="flex justify-between items-center gap-2">
+                          <span className="font-medium truncate">{asset.name}</span>
+                          <Badge variant={getStatusBadgeVariant(status)}>{status}</Badge>
+                        </div>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                          Qty {asset.quantity}
+                          {asset.sku ? ` · ${asset.sku}` : ''}
+                        </p>
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 p-6 overflow-y-auto bg-white dark:bg-slate-900">
+              {loading ? (
+                <LoadingState variant="skeleton" label="Loading asset details" className="space-y-4 max-w-xl">
+                  <SkeletonBlock className="h-8 w-48" />
+                  <SkeletonBlock className="h-40 w-full" />
+                </LoadingState>
+              ) : error ? (
+                <EmptyState
+                  icon={<Package className="h-6 w-6 text-slate-500" />}
+                  title="Asset details unavailable"
+                  description="Fix the list error to see item details."
+                />
+              ) : selectedAsset ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2 space-y-6">
+                    <div>
+                      <h2 className="text-2xl font-bold">{selectedAsset.name}</h2>
+                      <div className="flex items-center mt-2">
+                        <Badge variant={getStatusBadgeVariant(getStockStatus(selectedAsset))}>
+                          {getStockStatus(selectedAsset)}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <Card className="p-6">
+                      <h3 className="font-medium mb-4">Details</h3>
+                      <div className="space-y-4">
+                        <DetailItem label="SKU" value={selectedAsset.sku} />
+                        <DetailItem label="Category" value={selectedAsset.category} />
+                        <DetailItem label="Quantity" value={String(selectedAsset.quantity)} />
+                        <DetailItem label="Minimum quantity" value={String(selectedAsset.minQuantity)} />
+                        <DetailItem label="Unit cost" value={formatCurrency(selectedAsset.unitCost)} />
+                        <DetailItem label="Supplier" value={selectedAsset.supplier} />
+                        <DetailItem label="Location" value={selectedAsset.location} />
+                        <DetailItem label="Updated" value={formatDate(selectedAsset.updatedAt)} />
+                      </div>
+                    </Card>
+
+                    {selectedAsset.description ? (
+                      <Card className="p-6">
+                        <h3 className="font-medium mb-2">Description</h3>
+                        <p className="text-sm text-slate-600 dark:text-slate-400">{selectedAsset.description}</p>
+                      </Card>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-6">
+                    <Card className="p-6">
+                      <h3 className="font-medium mb-4">Stock</h3>
+                      <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">
+                        {selectedAsset.quantity}
+                      </p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                        Reorder when at or below {selectedAsset.minQuantity}
+                      </p>
+                    </Card>
+                  </div>
                 </div>
               ) : (
-                filteredAssets.map((asset) => (
-                <div
-                  key={asset.id}
-                  className={`p-3 rounded cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 ${
-                    selectedAsset?.id === asset.id ? 'bg-slate-100 dark:bg-slate-700' : ''
-                  }`}
-                  onClick={() => setSelectedAsset(asset)}
-                >
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium">{asset.id}</span>
-                    <Badge variant={getStatusBadgeVariant(asset.status)}>
-                      {asset.status}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">{asset.model}</p>
-                </div>
-              ))
+                <EmptyState
+                  icon={<Package className="h-6 w-6 text-slate-500" />}
+                  title="No asset selected"
+                  description="Select an asset from the list to view details"
+                />
               )}
             </div>
           </div>
-
-          {/* Asset Details */}
-          <div className="flex-1 p-6 overflow-y-auto bg-white dark:bg-slate-900">
-            {selectedAsset ? (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
-                  <div>
-                    <h2 className="text-2xl font-bold">{selectedAsset.name}</h2>
-                    <div className="flex items-center mt-2">
-                      <Badge variant={getStatusBadgeVariant(selectedAsset.status)}>
-                        {selectedAsset.status}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <Card className="p-6">
-                    <h3 className="font-medium mb-4">Details</h3>
-                    <div className="space-y-4">
-                      <DetailItem label="Serial Number" value={selectedAsset.serialNumber} />
-                      <DetailItem label="Manufacturer" value={selectedAsset.manufacturer} />
-                      <DetailItem label="Model" value={selectedAsset.model} />
-                      <DetailItem label="Model ID" value={selectedAsset.modelId} />
-                      <DetailItem label="Location" value={selectedAsset.location} />
-                      <DetailItem label="Last Seen" value={selectedAsset.lastSeen} />
-                      <DetailItem label="Warranty Contract" value={selectedAsset.warrantyContract} />
-                      <DetailItem 
-                        label="Warranty expiration date" 
-                        value={new Date(selectedAsset.warrantyExpiration).toLocaleDateString()}
-                      />
-                    </div>
-                  </Card>
-                </div>
-
-                <div className="space-y-6">
-                  <Card className="p-6">
-                    <h3 className="font-medium mb-4">Avatar</h3>
-                    <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-4 flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="mx-auto w-24 h-24 bg-slate-200 dark:bg-slate-700 rounded flex items-center justify-center mb-2">
-                          <span className="text-slate-400">Image</span>
-                        </div>
-                        <Button variant="outline" size="sm" className="mt-2">
-                          Change
-                        </Button>
-                      </div>
-                    </div>
-                  </Card>
-
-                  <Card className="p-6">
-                    <h3 className="font-medium mb-4">Linked objects</h3>
-                    <div className="space-y-4">
-                      <div>
-                            <h4 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">Outbound references</h4>
-                            <div className="space-y-2">
-                              <div className="text-sm">
-                                <span className="text-slate-500 dark:text-slate-400">Located at:</span>{' '}
-                                <span className="font-medium">{selectedAsset.location}</span>
-                              </div>
-                              <div className="text-sm">
-                                <span className="text-slate-500 dark:text-slate-400">Model type of:</span>{' '}
-                                <span className="font-medium">{selectedAsset.model}</span>
-                              </div>
-                              <div className="text-sm">
-                                <span className="text-slate-500 dark:text-slate-400">Financial:</span>{' '}
-                                <span className="font-medium">{selectedAsset.warrantyContract}</span>
-                              </div>
-                            </div>
-                          </div>
-                    </div>
-                  </Card>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <Package className="mx-auto h-12 w-12 text-slate-400" />
-                  <h3 className="mt-2 text-sm font-medium text-slate-900 dark:text-white">No asset selected</h3>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Select an asset from the list to view details</p>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       </div>
-    </div>
     </PageShell>
-  );
-};
-
-interface DetailItemProps {
-  label: string;
-  value: React.ReactNode;
+  )
 }
 
-const DetailItem: React.FC<DetailItemProps> = ({ label, value }) => (
-  <div className="grid grid-cols-3 gap-4">
-    <div className="text-sm text-slate-500 dark:text-slate-400">{label}</div>
-    <div className="col-span-2 text-sm font-medium">{value || '-'}</div>
-  </div>
-);
+function DetailItem({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="grid grid-cols-3 gap-4">
+      <div className="text-sm text-slate-500 dark:text-slate-400">{label}</div>
+      <div className="col-span-2 text-sm font-medium">{value || '—'}</div>
+    </div>
+  )
+}
 
-export default AssetsPage;
+export default AssetsPage

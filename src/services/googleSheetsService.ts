@@ -15,7 +15,6 @@ export interface SheetData {
 
 class GoogleSheetsService {
   private CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'your-google-client-id'
-  private API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || 'your-google-api-key'
   private SCOPES = 'https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly'
 
   // Initialize Google Auth
