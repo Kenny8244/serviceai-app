@@ -1,3 +1,3 @@
 "use client"
 
-export { default } from "./RouterApp"
+export { default } from "./app/RouterApp"

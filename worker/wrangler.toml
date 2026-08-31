@@ -1,0 +1,11 @@
+name = "serviceai-api"
+main = "src/index.ts"
+compatibility_date = "2026-08-25"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+FRONTEND_URL = "https://serviceai-app.pages.dev"
+
+# IDs omitted so the first deploy on a new account can provision KV automatically.
+[[kv_namespaces]]
+binding = "DEMO_KV"

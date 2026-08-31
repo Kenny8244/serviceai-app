@@ -9,8 +9,10 @@ import {
   getAssetTransactions
 } from '../utils/database';
 import { CreateAssetRequest, UpdateAssetRequest, InventoryTransactionRequest } from '../models/Asset';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
+router.use(authenticateToken);
 
 // Get all assets for the authenticated user
 router.get('/', async (req: Request, res: Response) => {

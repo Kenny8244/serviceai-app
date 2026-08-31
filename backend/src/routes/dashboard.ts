@@ -1,64 +1,17 @@
 import express from 'express'
 import { authenticateToken } from '../middleware/auth'
 import { supabase } from '../config/supabase'
+import { getDashboardOverview } from '../data/dashboardMocks'
 
 const router = express.Router()
 
-// GET /api/dashboard/overview - Get dashboard overview data
-router.get('/overview', authenticateToken, async (req, res) => {
+// GET /api/dashboard/overview - Workspace KPI and activity for the selected vertical.
+// Auth is omitted for now because the live dashboard is reachable without a JWT.
+// Add authenticateToken here when replacing mocks with org-scoped queries.
+router.get('/overview', (req, res) => {
   try {
-    const organizationId = req.user.organizationId
-
-    // Get recent metrics from multiple sources
-    const { data: recentActivity, error: activityError } = await supabase
-      .from('activity_log')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .order('created_at', { ascending: false })
-      .limit(10)
-
-    const { data: systemMetrics, error: metricsError } = await supabase
-      .from('system_metrics')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
-
-    const { data: alerts, error: alertsError } = await supabase
-      .from('system_alerts')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-      .limit(5)
-
-    if (activityError && activityError.code !== 'PGRST116') throw activityError
-    if (metricsError && metricsError.code !== 'PGRST116') throw metricsError
-    if (alertsError && alertsError.code !== 'PGRST116') throw alertsError
-
-    const overview = {
-      totalUsers: systemMetrics?.total_users || 0,
-      activeTickets: systemMetrics?.active_tickets || 0,
-      completedTasks: systemMetrics?.completed_tasks || 0,
-      systemHealth: systemMetrics?.system_health || 85,
-      recentActivity: recentActivity?.map(activity => ({
-        id: activity.id,
-        type: activity.activity_type,
-        description: activity.description,
-        timestamp: activity.created_at,
-        user: activity.user_name
-      })) || [],
-      activeAlerts: alerts?.map(alert => ({
-        id: alert.id,
-        type: alert.alert_type,
-        message: alert.message,
-        severity: alert.severity,
-        createdAt: alert.created_at
-      })) || []
-    }
-
-    res.json(overview)
+    const verticalId = typeof req.query.verticalId === 'string' ? req.query.verticalId : undefined
+    res.json(getDashboardOverview(verticalId))
   } catch (error) {
     console.error('Error fetching dashboard overview:', error)
     res.status(500).json({ error: 'Failed to fetch dashboard overview' })

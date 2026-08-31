@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 export interface User {
   id: string;
@@ -103,19 +103,125 @@ export interface CreateServiceRequest {
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   attachments?: string[];
 }
+
+export interface Asset {
+  id: string
+  name: string
+  description: string | null
+  category: string
+  sku: string | null
+  quantity: number
+  minQuantity: number
+  unitCost: number | null
+  supplier: string | null
+  location: string | null
+  tags: string[] | null
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+}
+
+function pickRaw(obj: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    if (obj[key] != null) return obj[key]
+  }
+  return undefined
+}
+
+function normalizeServiceRequest(rawValue: unknown): ServiceRequest {
+  const raw = asRecord(rawValue)
+  const resolvedAt = pickRaw(raw, 'resolvedAt', 'resolved_at')
+  return {
+    id: String(raw.id ?? ''),
+    userId: String(pickRaw(raw, 'userId', 'user_id') ?? ''),
+    verticalId: String(pickRaw(raw, 'verticalId', 'vertical_id') ?? ''),
+    title: String(raw.title ?? ''),
+    description: String(raw.description ?? ''),
+    category: String(raw.category ?? ''),
+    priority: (raw.priority as ServiceRequest['priority']) || 'medium',
+    status: (raw.status as ServiceRequest['status']) || 'open',
+    attachments: Array.isArray(raw.attachments) ? (raw.attachments as string[]) : [],
+    createdAt: new Date(String(pickRaw(raw, 'createdAt', 'created_at') ?? Date.now())),
+    updatedAt: new Date(String(pickRaw(raw, 'updatedAt', 'updated_at') ?? Date.now())),
+    resolvedAt: resolvedAt ? new Date(String(resolvedAt)) : undefined,
+  }
+}
+
+function normalizeAsset(rawValue: unknown): Asset {
+  const raw = asRecord(rawValue)
+  const unitCost = pickRaw(raw, 'unitCost', 'unit_cost')
+  return {
+    id: String(raw.id ?? ''),
+    name: String(raw.name ?? 'Untitled'),
+    description: (pickRaw(raw, 'description') as string | null) ?? null,
+    category: String(raw.category ?? 'general'),
+    sku: (pickRaw(raw, 'sku') as string | null) ?? null,
+    quantity: Number(raw.quantity ?? 0),
+    minQuantity: Number(pickRaw(raw, 'minQuantity', 'min_quantity') ?? 0),
+    unitCost: unitCost == null || unitCost === '' ? null : Number(unitCost),
+    supplier: (pickRaw(raw, 'supplier') as string | null) ?? null,
+    location: (pickRaw(raw, 'location') as string | null) ?? null,
+    tags: Array.isArray(raw.tags) ? (raw.tags as string[]) : null,
+    isActive: pickRaw(raw, 'isActive', 'is_active') !== false,
+    createdAt: String(pickRaw(raw, 'createdAt', 'created_at') ?? ''),
+    updatedAt: String(pickRaw(raw, 'updatedAt', 'updated_at') ?? ''),
+  }
+}
+
+function asAssetList(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data
+  const assets = asRecord(data).assets
+  return Array.isArray(assets) ? assets : []
+}
+
+export type DashboardStatIconKey =
+  | 'package'
+  | 'users'
+  | 'trending-up'
+  | 'alert-triangle'
+  | 'wrench'
+  | 'store'
+  | 'building-2'
+
+export interface DashboardStat {
+  label: string
+  value: string
+  iconKey: DashboardStatIconKey | string
+}
+
+export interface DashboardActivity {
+  title: string
+  detail: string
+}
+
+export interface DashboardOverview {
+  stats: DashboardStat[]
+  activities: DashboardActivity[]
+  aiRecommendation: {
+    title: string
+    detail: string
+  }
+}
+
 class ApiService {
-  private getAuthHeaders(): HeadersInit {
+  private getAuthHeaders(jsonBody = false): HeadersInit {
     const token = localStorage.getItem('authToken');
     return {
-      'Content-Type': 'application/json',
+      ...(jsonBody ? { 'Content-Type': 'application/json' } : {}),
       ...(token && { Authorization: `Bearer ${token}` }),
     };
   }
 
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Network error' }));
-      throw new Error(error.error || 'Request failed');
+      const payload = await response.json().catch(() => ({ error: 'Network error' }));
+      const error = new Error(payload.error || 'Request failed') as Error & { status?: number };
+      error.status = response.status;
+      throw error;
     }
     return response.json();
   }
@@ -159,7 +265,7 @@ class ApiService {
   async selectVertical(verticalId: string): Promise<any> {
     const response = await fetch(`${API_BASE_URL}/verticals/select`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify({ verticalId }),
     });
     return this.handleResponse(response);
@@ -171,16 +277,20 @@ class ApiService {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
-    return this.handleResponse<{ serviceRequests: ServiceRequest[] }>(response);
+    const data = await this.handleResponse<{ serviceRequests?: unknown[] }>(response);
+    return {
+      serviceRequests: (data.serviceRequests ?? []).map(normalizeServiceRequest),
+    };
   }
 
   async createServiceRequest(serviceRequest: CreateServiceRequest): Promise<{ serviceRequest: ServiceRequest }> {
     const response = await fetch(`${API_BASE_URL}/service-requests`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(serviceRequest),
     });
-    return this.handleResponse<{ serviceRequest: ServiceRequest }>(response);
+    const data = await this.handleResponse<{ serviceRequest: unknown }>(response);
+    return { serviceRequest: normalizeServiceRequest(data.serviceRequest) };
   }
 
   async getServiceRequest(id: string): Promise<{ serviceRequest: ServiceRequest }> {
@@ -188,16 +298,18 @@ class ApiService {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
-    return this.handleResponse<{ serviceRequest: ServiceRequest }>(response);
+    const data = await this.handleResponse<{ serviceRequest: unknown }>(response);
+    return { serviceRequest: normalizeServiceRequest(data.serviceRequest) };
   }
 
   // Dashboard endpoints
-  async getDashboardOverview() {
-    const response = await fetch(`${API_BASE_URL}/dashboard/overview`, {
+  async getDashboardOverview(verticalId: string): Promise<DashboardOverview> {
+    const params = new URLSearchParams({ verticalId });
+    const response = await fetch(`${API_BASE_URL}/dashboard/overview?${params.toString()}`, {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
-    return this.handleResponse(response);
+    return this.handleResponse<DashboardOverview>(response);
   }
 
   async getDashboardMetrics() {
@@ -243,7 +355,7 @@ class ApiService {
   async queryAIAssistant(query: string) {
     const response = await fetch(`${API_BASE_URL}/assistant/query`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify({ query }),
     });
     return this.handleResponse(response);
@@ -274,7 +386,7 @@ class ApiService {
   }) {
     const response = await fetch(`${API_BASE_URL}/team`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(memberData),
     });
     return this.handleResponse(response);
@@ -283,7 +395,7 @@ class ApiService {
   async updateTeamMember(memberId: string, updates: any) {
     const response = await fetch(`${API_BASE_URL}/team/${memberId}`, {
       method: 'PUT',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(updates),
     });
     return this.handleResponse(response);
@@ -300,7 +412,7 @@ class ApiService {
   async updateTeamMemberWorkload(memberId: string, workload: number) {
     const response = await fetch(`${API_BASE_URL}/team/${memberId}/workload`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify({ workload }),
     });
     return this.handleResponse(response);
@@ -364,7 +476,7 @@ class ApiService {
   }) {
     const response = await fetch(`${API_BASE_URL}/ai-hub/workflows`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(workflowData),
     });
     return this.handleResponse(response);
@@ -373,7 +485,7 @@ class ApiService {
   async updateAIWorkflow(workflowId: string, updates: any) {
     const response = await fetch(`${API_BASE_URL}/ai-hub/workflows/${workflowId}`, {
       method: 'PUT',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(updates),
     });
     return this.handleResponse(response);
@@ -402,7 +514,7 @@ class ApiService {
   }) {
     const response = await fetch(`${API_BASE_URL}/ai-hub/forms`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(formData),
     });
     return this.handleResponse(response);
@@ -411,7 +523,7 @@ class ApiService {
   async generateAIContent(type: string, prompt: string) {
     const response = await fetch(`${API_BASE_URL}/ai-hub/generate`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify({ type, prompt }),
     });
     return this.handleResponse(response);
@@ -426,7 +538,15 @@ class ApiService {
   }
 
   // Asset Management endpoints
-  async getAssets(filters: any = {}) {
+  async getAssets(filters: {
+    category?: string
+    supplier?: string
+    location?: string
+    search?: string
+    lowStock?: boolean
+    page?: number
+    limit?: number
+  } = {}): Promise<Asset[]> {
     const queryParams = new URLSearchParams();
     if (filters.category) queryParams.append('category', filters.category);
     if (filters.supplier) queryParams.append('supplier', filters.supplier);
@@ -440,7 +560,8 @@ class ApiService {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
-    return this.handleResponse(response);
+    const data = await this.handleResponse<unknown>(response);
+    return asAssetList(data).map(normalizeAsset);
   }
 
   async getAssetById(assetId: string) {
@@ -454,7 +575,7 @@ class ApiService {
   async createAsset(assetData: any) {
     const response = await fetch(`${API_BASE_URL}/assets`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(assetData),
     });
     return this.handleResponse(response);
@@ -463,7 +584,7 @@ class ApiService {
   async updateAsset(assetId: string, updates: any) {
     const response = await fetch(`${API_BASE_URL}/assets/${assetId}`, {
       method: 'PUT',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(updates),
     });
     return this.handleResponse(response);
@@ -488,7 +609,7 @@ class ApiService {
   async createInventoryTransaction(assetId: string, transactionData: any) {
     const response = await fetch(`${API_BASE_URL}/assets/${assetId}/transactions`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(transactionData),
     });
     return this.handleResponse(response);
@@ -506,7 +627,7 @@ class ApiService {
   async updateSystemSettings(settings: any) {
     const response = await fetch(`${API_BASE_URL}/settings`, {
       method: 'PUT',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(settings),
     });
     return this.handleResponse(response);
@@ -523,7 +644,7 @@ class ApiService {
   async updateOrganizationDetails(orgData: any) {
     const response = await fetch(`${API_BASE_URL}/settings/organization`, {
       method: 'PUT',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(orgData),
     });
     return this.handleResponse(response);
@@ -540,7 +661,7 @@ class ApiService {
   async updateAIConfiguration(config: any) {
     const response = await fetch(`${API_BASE_URL}/settings/ai-config`, {
       method: 'PUT',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(config),
     });
     return this.handleResponse(response);
@@ -557,7 +678,7 @@ class ApiService {
   async createIntegration(integrationData: any) {
     const response = await fetch(`${API_BASE_URL}/settings/integrations`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
       body: JSON.stringify(integrationData),
     });
     return this.handleResponse(response);

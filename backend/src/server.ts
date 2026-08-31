@@ -62,7 +62,7 @@ app.use('/api/settings', settingsRoutes)
 app.use('/api/dashboard', dashboardRoutes)
 
 // 404 handler
-app.use('*', (req, res) => {
+app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' })
 })
 
@@ -75,24 +75,40 @@ app.use((err: any, req: any, res: any, next: any) => {
   })
 })
 
-const PORT = process.env.PORT || 3001
+const PORT = Number(process.env.PORT) || 3001
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 ServiceAI Backend Server running on port ${PORT}`)
-  console.log(`📊 Health check: http://localhost:${PORT}/health`)
-  console.log(`🔐 Authentication: http://localhost:${PORT}/api/auth/*`)
-  console.log(`📦 Assets: http://localhost:${PORT}/api/assets/*`)
-  console.log(`🎯 Onboarding: http://localhost:${PORT}/api/onboarding/*`)
-  console.log(`🏢 Verticals: http://localhost:${PORT}/api/verticals/*`)
-  console.log(`🎫 Service Requests: http://localhost:${PORT}/api/service-requests/*`)
-  console.log(`🔍 AI Search: http://localhost:${PORT}/api/ai-search/*`)
-  console.log(`👥 Team Management: http://localhost:${PORT}/api/team/*`)
-  console.log(`📈 Analytics: http://localhost:${PORT}/api/analytics/*`)
-  console.log(`🤖 AI Hub: http://localhost:${PORT}/api/ai-hub/*`)
-  console.log(`⚙️ Settings: http://localhost:${PORT}/api/settings/*`)
-  console.log(`📊 Dashboard: http://localhost:${PORT}/api/dashboard/*`)
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`)
-})
+export function startServer(port: number = PORT) {
+  const server = app.listen(port, () => {
+    console.log(`🚀 ServiceAI Backend Server running on port ${port}`)
+    console.log(`📊 Health check: http://localhost:${port}/health`)
+    console.log(`🔐 Authentication: http://localhost:${port}/api/auth/*`)
+    console.log(`📦 Assets: http://localhost:${port}/api/assets/*`)
+    console.log(`🎯 Onboarding: http://localhost:${port}/api/onboarding/*`)
+    console.log(`🏢 Verticals: http://localhost:${port}/api/verticals/*`)
+    console.log(`🎫 Service Requests: http://localhost:${port}/api/service-requests/*`)
+    console.log(`🔍 AI Search: http://localhost:${port}/api/ai-search/*`)
+    console.log(`👥 Team Management: http://localhost:${port}/api/team/*`)
+    console.log(`📈 Analytics: http://localhost:${port}/api/analytics/*`)
+    console.log(`🤖 AI Hub: http://localhost:${port}/api/ai-hub/*`)
+    console.log(`⚙️ Settings: http://localhost:${port}/api/settings/*`)
+    console.log(`📊 Dashboard: http://localhost:${port}/api/dashboard/*`)
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`)
+  })
+
+  server.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`Port ${port} is already in use`)
+    } else {
+      console.error('Failed to start server:', error)
+    }
+    process.exit(1)
+  })
+
+  return server
+}
+
+if (require.main === module) {
+  startServer()
+}
 
 export default app
