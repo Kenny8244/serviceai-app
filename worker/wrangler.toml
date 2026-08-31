@@ -2,6 +2,9 @@ name = "serviceai-api"
 main = "src/index.ts"
 compatibility_date = "2026-08-25"
 compatibility_flags = ["nodejs_compat"]
+# Public workers.dev URL is optional: Pages calls this Worker via service binding.
+# Avoids the first-deploy prompt to register a workers.dev subdomain in CI.
+workers_dev = false
 
 [vars]
 FRONTEND_URL = "https://serviceai-app.pages.dev"
