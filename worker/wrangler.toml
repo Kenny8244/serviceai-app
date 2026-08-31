@@ -6,7 +6,6 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 FRONTEND_URL = "https://serviceai-app.pages.dev"
 
+# IDs omitted so the first deploy on a new account can provision KV automatically.
 [[kv_namespaces]]
 binding = "DEMO_KV"
-preview_id = "535cc14546a84aa48b879ad121f96d75"
-id = "75852e0cb47846cfbb44af893fa8c2f2"
