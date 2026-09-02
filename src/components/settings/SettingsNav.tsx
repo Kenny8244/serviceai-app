@@ -9,13 +9,21 @@ export interface SettingsNavItem {
   icon: ReactNode
 }
 
+export interface SettingsNavAction {
+  title: string
+  description: string
+  icon: ReactNode
+  onClick: () => void
+}
+
 interface SettingsNavProps {
   items: SettingsNavItem[]
   activeId: string
   onSelect: (id: string) => void
+  footerAction?: SettingsNavAction
 }
 
-export function SettingsNav({ items, activeId, onSelect }: SettingsNavProps) {
+export function SettingsNav({ items, activeId, onSelect, footerAction }: SettingsNavProps) {
   return (
     <Card>
       <CardContent className="p-4">
@@ -42,6 +50,24 @@ export function SettingsNav({ items, activeId, onSelect }: SettingsNavProps) {
             </button>
           ))}
         </nav>
+
+        {footerAction ? (
+          <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+            <button
+              type="button"
+              onClick={footerAction.onClick}
+              className="w-full flex items-center space-x-3 px-3 py-2 text-left rounded-md transition-colors bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/30"
+            >
+              {footerAction.icon}
+              <div>
+                <div className="font-medium text-sm">{footerAction.title}</div>
+                <div className="text-xs text-red-600/80 dark:text-red-400">
+                  {footerAction.description}
+                </div>
+              </div>
+            </button>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   )

@@ -42,6 +42,7 @@ export interface CreateUserRequest {
 export interface LoginRequest {
   email: string;
   password: string;
+  rememberMe?: boolean;
 }
 
 export interface ServiceRequest {
@@ -216,7 +217,7 @@ export interface DashboardOverview {
 
 class ApiService {
   private getAuthHeaders(jsonBody = false): HeadersInit {
-    const token = localStorage.getItem('authToken');
+    const token = this.getAuthToken();
     return {
       ...(jsonBody ? { 'Content-Type': 'application/json' } : {}),
       ...(token && { Authorization: `Bearer ${token}` }),
@@ -700,20 +701,26 @@ class ApiService {
   }
 
   // Token management
-  setAuthToken(token: string): void {
-    localStorage.setItem('authToken', token);
+  setAuthToken(token: string, options?: { persist?: boolean }): void {
+    const persist = Boolean(options?.persist);
+    const store = persist ? localStorage : sessionStorage;
+    const other = persist ? sessionStorage : localStorage;
+
+    other.removeItem('authToken');
+    other.removeItem('authUserId');
+    store.setItem('authToken', token);
     const userId = this.readUserIdFromToken(token);
     if (userId) {
-      localStorage.setItem('authUserId', userId);
+      store.setItem('authUserId', userId);
     }
   }
 
   getAuthToken(): string | null {
-    return localStorage.getItem('authToken');
+    return sessionStorage.getItem('authToken') || localStorage.getItem('authToken');
   }
 
   getAuthUserId(): string | null {
-    const stored = localStorage.getItem('authUserId');
+    const stored = sessionStorage.getItem('authUserId') || localStorage.getItem('authUserId');
     if (stored) return stored;
     const token = this.getAuthToken();
     return token ? this.readUserIdFromToken(token) : null;
@@ -737,6 +744,8 @@ class ApiService {
   clearAuthToken(): void {
     localStorage.removeItem('authToken');
     localStorage.removeItem('authUserId');
+    sessionStorage.removeItem('authToken');
+    sessionStorage.removeItem('authUserId');
   }
 
   private readUserIdFromToken(token: string): string | null {

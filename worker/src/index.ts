@@ -146,24 +146,38 @@ app.post('/api/auth/register', async (c) => {
 })
 
 app.post('/api/auth/login', async (c) => {
-  const { email, password } = await c.req.json<{ email: string; password: string }>()
+  const { email, password, rememberMe } = await c.req.json<{
+    email: string
+    password: string
+    rememberMe?: boolean
+  }>()
   if (!email || !password) return c.json({ error: 'Email and password are required' }, 400)
+  const persist = Boolean(rememberMe)
 
   if (hasSupabaseLogin(c.env)) {
     try {
       const account = await loginAccount(c.env, email, password)
-      const token = await generateToken(c.env, {
-        userId: account.id,
-        email: account.email,
-        organizationId: account.tenantId,
-      })
+      const token = await generateToken(
+        c.env,
+        {
+          userId: account.id,
+          email: account.email,
+          organizationId: account.tenantId,
+        },
+        { rememberMe: persist }
+      )
       const selectedVertical = await resolveUserVertical(
         c.env,
         c.env.DEMO_KV,
         account.id,
         account.tenantId
       )
-      return c.json({ user: publicUser(account), token, expiresAt: getTokenExpiration(), selectedVertical })
+      return c.json({
+        user: publicUser(account),
+        token,
+        expiresAt: getTokenExpiration(persist),
+        selectedVertical,
+      })
     } catch (error) {
       if (error instanceof AuthHttpError) return c.json({ error: error.message }, error.status)
       console.error('Login error:', error)
@@ -176,9 +190,14 @@ app.post('/api/auth/login', async (c) => {
     return c.json({ error: 'Invalid email or password' }, 401)
   }
 
-  const token = await generateToken(c.env, { userId: user.id, email: user.email })
+  const token = await generateToken(c.env, { userId: user.id, email: user.email }, { rememberMe: persist })
   const selectedVertical = await resolveUserVertical(c.env, c.env.DEMO_KV, user.id)
-  return c.json({ user: publicUser(user), token, expiresAt: getTokenExpiration(), selectedVertical })
+  return c.json({
+    user: publicUser(user),
+    token,
+    expiresAt: getTokenExpiration(persist),
+    selectedVertical,
+  })
 })
 
 app.post('/api/auth/demo', async (c) => {

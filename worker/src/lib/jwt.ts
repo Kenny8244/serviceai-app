@@ -7,7 +7,8 @@ function getSecret(env: { JWT_SECRET?: string }) {
 
 export async function generateToken(
   env: { JWT_SECRET?: string },
-  payload: Omit<JwtPayload, 'organizationId'> & { organizationId?: string }
+  payload: Omit<JwtPayload, 'organizationId'> & { organizationId?: string },
+  options: { rememberMe?: boolean } = {}
 ): Promise<string> {
   return new SignJWT({
     userId: payload.userId,
@@ -15,7 +16,7 @@ export async function generateToken(
     organizationId: payload.organizationId || 'default-org-id',
   })
     .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('7d')
+    .setExpirationTime(options.rememberMe ? '30d' : '1d')
     .sign(getSecret(env))
 }
 
@@ -35,9 +36,9 @@ export async function verifyToken(
   }
 }
 
-export function getTokenExpiration(): string {
+export function getTokenExpiration(rememberMe = false): string {
   const date = new Date()
-  date.setDate(date.getDate() + 7)
+  date.setDate(date.getDate() + (rememberMe ? 30 : 1))
   return date.toISOString()
 }
 

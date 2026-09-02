@@ -198,19 +198,6 @@ export function Settings() {
               ))}
             </div>
           </div>
-
-          <div className="flex items-center justify-between p-4 border border-slate-200 dark:border-slate-700 rounded-lg">
-            <div>
-              <h4 className="font-medium text-slate-900 dark:text-slate-100">Session</h4>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                Sign out of this device. You will need to log in again to continue.
-              </p>
-            </div>
-            <Button variant="outline" onClick={handleLogout}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Log out
-            </Button>
-          </div>
         </div>
       )
     },
@@ -671,6 +658,12 @@ export function Settings() {
               }))}
               activeId={activeSection}
               onSelect={selectSection}
+              footerAction={{
+                title: 'Logout',
+                description: 'Sign out of your account',
+                icon: <LogOut className="h-5 w-5" />,
+                onClick: handleLogout,
+              }}
             />
           </div>
 

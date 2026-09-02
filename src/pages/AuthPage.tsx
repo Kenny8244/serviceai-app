@@ -71,11 +71,14 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
         const credentials: LoginRequest = {
           email,
           password,
+          rememberMe,
         }
         response = await apiService.login(credentials)
       }
 
-      apiService.setAuthToken(response.token)
+      apiService.setAuthToken(response.token, {
+        persist: activeTab === 'login' && rememberMe,
+      })
       await onAuthSuccess(response, { isNewAccount: activeTab === "signup" })
     } catch (error) {
       console.error("Auth error:", error)
