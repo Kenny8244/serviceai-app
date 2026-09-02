@@ -4,9 +4,38 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { FormField, nativeSelectClassName } from "@/components/ui/form-field"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Sparkles, ArrowRight, Shield, Zap, Brain, Users } from "lucide-react"
+import { Sparkles, ArrowRight, Shield, Zap, Brain, Users, Eye, EyeOff } from "lucide-react"
 import { apiService, type AuthResponse, type CreateUserRequest, type LoginRequest } from "@/services/api"
 import { toAuthMessage } from "@/lib/userFacingError"
+import { cn } from "@/lib/utils"
+
+const authInputClassName =
+  "h-12 bg-input/50 border-border/50 backdrop-blur-sm focus:gradient-input-focus transition-all"
+
+function PasswordInput({
+  className,
+  ...props
+}: Omit<React.ComponentProps<typeof Input>, "type">) {
+  const [visible, setVisible] = useState(false)
+
+  return (
+    <div className="relative">
+      <Input
+        {...props}
+        type={visible ? "text" : "password"}
+        className={cn(authInputClassName, "pr-12", className)}
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((current) => !current)}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+        aria-label={visible ? "Hide password" : "Show password"}
+      >
+        {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
+  )
+}
 
 interface AuthPageProps {
   onAuthSuccess: (response: AuthResponse, options?: { isNewAccount?: boolean }) => void | Promise<void>
@@ -368,15 +397,14 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
 
                       <div className="grid grid-cols-2 gap-4">
                         <FormField label="Password" htmlFor="password" required>
-                          <Input
+                          <PasswordInput
                             id="password"
-                            type="password"
                             placeholder="Create a secure password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
                             minLength={8}
-                            className="h-12 bg-input/50 border-border/50 backdrop-blur-sm focus:gradient-input-focus transition-all"
+                            autoComplete="new-password"
                           />
                           <p className="text-xs text-muted-foreground">Minimum 8 characters</p>
                         </FormField>
@@ -386,16 +414,15 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                           required
                           error={confirmPassword && password !== confirmPassword ? 'Passwords do not match' : undefined}
                         >
-                          <Input
+                          <PasswordInput
                             id="confirmPassword"
-                            type="password"
                             placeholder="Confirm your password"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             required
                             minLength={8}
+                            autoComplete="new-password"
                             aria-invalid={Boolean(confirmPassword && password !== confirmPassword)}
-                            className="h-12 bg-input/50 border-border/50 backdrop-blur-sm focus:gradient-input-focus transition-all"
                           />
                         </FormField>
                       </div>
@@ -416,14 +443,13 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
                       </FormField>
 
                       <FormField label="Password" htmlFor="password">
-                        <Input
+                        <PasswordInput
                           id="password"
-                          type="password"
                           placeholder="Enter your password"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           required
-                          className="h-12 bg-input/50 border-border/50 backdrop-blur-sm focus:gradient-input-focus transition-all"
+                          autoComplete="current-password"
                         />
                       </FormField>
 
