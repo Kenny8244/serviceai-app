@@ -1,6 +1,6 @@
 "use client"
 
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom"
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocation } from "react-router-dom"
 import {
   AuthPage,
   VerticalSelectionPage,
@@ -112,32 +112,42 @@ function SavedVerticalRedirect() {
   )
 }
 
+function RequireAuth() {
+  if (!apiService.isAuthenticated()) {
+    return <Navigate to="/auth" replace />
+  }
+  return <Outlet />
+}
+
 export default function RouterApp() {
   return (
     <ThemeProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<SavedVerticalRedirect />} />
           <Route path="/auth" element={<AuthRoute />} />
-          <Route path="/vertical-selection" element={<VerticalRoute />} />
-          <Route path="/onboarding" element={<OnboardingRoute />} />
-          <Route path="/dashboard-old" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/retail" element={<SavedVerticalRedirect />} />
-          <Route path="/restaurant" element={<SavedVerticalRedirect />} />
-          <Route path="/marketplace" element={<SavedVerticalRedirect />} />
-          <Route path="/enterprise" element={<SavedVerticalRedirect />} />
 
-          <Route element={<AppLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/assets" element={<AssetsPage />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/ai-hub" element={<AIHub />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/team" element={<TeamManagement />} />
-            <Route path="/test-ai-search" element={<TestAISearchPage />} />
+          <Route element={<RequireAuth />}>
+            <Route path="/" element={<SavedVerticalRedirect />} />
+            <Route path="/vertical-selection" element={<VerticalRoute />} />
+            <Route path="/onboarding" element={<OnboardingRoute />} />
+            <Route path="/dashboard-old" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/retail" element={<SavedVerticalRedirect />} />
+            <Route path="/restaurant" element={<SavedVerticalRedirect />} />
+            <Route path="/marketplace" element={<SavedVerticalRedirect />} />
+            <Route path="/enterprise" element={<SavedVerticalRedirect />} />
+
+            <Route element={<AppLayout />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/assets" element={<AssetsPage />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/ai-hub" element={<AIHub />} />
+              <Route path="/analytics" element={<Analytics />} />
+              <Route path="/team" element={<TeamManagement />} />
+              <Route path="/test-ai-search" element={<TestAISearchPage />} />
+            </Route>
+
+            <Route path="*" element={<NotFoundPage />} />
           </Route>
-
-          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>

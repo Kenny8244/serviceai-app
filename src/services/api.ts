@@ -719,18 +719,37 @@ class ApiService {
     return token ? this.readUserIdFromToken(token) : null;
   }
 
+  isAuthenticated(): boolean {
+    const token = this.getAuthToken();
+    if (!token) return false;
+    const payload = this.readTokenPayload(token);
+    if (!payload) {
+      this.clearAuthToken();
+      return false;
+    }
+    if (typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now()) {
+      this.clearAuthToken();
+      return false;
+    }
+    return true;
+  }
+
   clearAuthToken(): void {
     localStorage.removeItem('authToken');
     localStorage.removeItem('authUserId');
   }
 
   private readUserIdFromToken(token: string): string | null {
+    const payload = this.readTokenPayload(token);
+    return typeof payload?.userId === 'string' ? payload.userId : null;
+  }
+
+  private readTokenPayload(token: string): { userId?: string; exp?: number } | null {
     try {
       const part = token.split('.')[1];
       if (!part) return null;
       const padded = part.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (part.length % 4)) % 4);
-      const payload = JSON.parse(atob(padded)) as { userId?: string };
-      return typeof payload.userId === 'string' ? payload.userId : null;
+      return JSON.parse(atob(padded)) as { userId?: string; exp?: number };
     } catch {
       return null;
     }

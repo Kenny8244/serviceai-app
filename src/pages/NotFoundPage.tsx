@@ -4,11 +4,16 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { PageContent } from '@/components/layout/PageContent'
 import { hasSelectedVertical } from '@/lib/verticalStorage'
+import { apiService } from '@/services/api'
 
 export function NotFoundPage() {
   const navigate = useNavigate()
 
   const handleGoHome = () => {
+    if (!apiService.isAuthenticated()) {
+      navigate('/auth', { replace: true })
+      return
+    }
     navigate(hasSelectedVertical() ? '/dashboard' : '/vertical-selection')
   }
 
