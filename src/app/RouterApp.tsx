@@ -16,15 +16,31 @@ import {
 } from "@/pages"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { ThemeProvider } from "@/lib/theme"
-import { getSelectedVertical, setSelectedVertical, hasSelectedVertical } from "@/lib/verticalStorage"
+import {
+  getSelectedVertical,
+  setSelectedVertical,
+  hasSelectedVertical,
+  getStoredVerticalForUser,
+  clearSelectedVertical,
+} from "@/lib/verticalStorage"
+import { apiService, type AuthResponse } from "@/services/api"
+
+async function persistVertical(verticalId: string) {
+  try {
+    await apiService.selectVertical(verticalId)
+  } catch (error) {
+    console.error("Failed to persist vertical selection:", error)
+  }
+}
 
 function VerticalRoute() {
   const navigate = useNavigate()
   return (
     <VerticalSelectionPage
       onBack={() => navigate("/auth", { replace: true })}
-      onVerticalSelect={(verticalId: string) => {
-        setSelectedVertical(verticalId)
+      onVerticalSelect={async (verticalId: string) => {
+        setSelectedVertical(verticalId, apiService.getAuthUserId() || undefined)
+        await persistVertical(verticalId)
         navigate("/onboarding", { state: { verticalId }, replace: true })
       }}
     />
@@ -33,9 +49,44 @@ function VerticalRoute() {
 
 function AuthRoute() {
   const navigate = useNavigate()
-  return (
-    <AuthPage onAuthSuccess={() => navigate("/vertical-selection", { replace: true })} />
-  )
+
+  const continueAfterAuth = async (response: AuthResponse, options?: { isNewAccount?: boolean }) => {
+    const userId = response.user.id
+
+    if (options?.isNewAccount) {
+      clearSelectedVertical()
+      navigate("/vertical-selection", { replace: true })
+      return
+    }
+
+    let verticalId = response.selectedVertical?.verticalId
+
+    if (!verticalId) {
+      try {
+        verticalId = (await apiService.getSelectedVertical())?.verticalId
+      } catch (error) {
+        console.error("Failed to load saved vertical:", error)
+      }
+    }
+
+    if (!verticalId) {
+      verticalId = getStoredVerticalForUser(userId) || undefined
+      if (verticalId) {
+        await persistVertical(verticalId)
+      }
+    }
+
+    if (verticalId) {
+      setSelectedVertical(verticalId, userId)
+      navigate("/dashboard", { replace: true })
+      return
+    }
+
+    clearSelectedVertical()
+    navigate("/vertical-selection", { replace: true })
+  }
+
+  return <AuthPage onAuthSuccess={continueAfterAuth} />
 }
 
 function OnboardingRoute() {
@@ -66,7 +117,7 @@ export default function RouterApp() {
     <ThemeProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Navigate to="/vertical-selection" replace />} />
+          <Route path="/" element={<SavedVerticalRedirect />} />
           <Route path="/auth" element={<AuthRoute />} />
           <Route path="/vertical-selection" element={<VerticalRoute />} />
           <Route path="/onboarding" element={<OnboardingRoute />} />

@@ -14,10 +14,17 @@ export interface User {
   updatedAt: Date;
 }
 
+export interface UserVertical {
+  userId: string;
+  verticalId: string;
+  selectedAt: string;
+}
+
 export interface AuthResponse {
   user: User;
   token: string;
   expiresAt: string;
+  selectedVertical?: UserVertical | null;
 }
 
 export interface CreateUserRequest {
@@ -262,13 +269,21 @@ class ApiService {
     return this.handleResponse<{ verticals: Vertical[] }>(response);
   }
 
-  async selectVertical(verticalId: string): Promise<any> {
+  async selectVertical(verticalId: string): Promise<UserVertical> {
     const response = await fetch(`${API_BASE_URL}/verticals/select`, {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify({ verticalId }),
     });
-    return this.handleResponse(response);
+    return this.handleResponse<UserVertical>(response);
+  }
+
+  async getSelectedVertical(): Promise<UserVertical | null> {
+    const response = await fetch(`${API_BASE_URL}/verticals/selected`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<UserVertical | null>(response);
   }
 
   // Service Request endpoints
@@ -687,14 +702,38 @@ class ApiService {
   // Token management
   setAuthToken(token: string): void {
     localStorage.setItem('authToken', token);
+    const userId = this.readUserIdFromToken(token);
+    if (userId) {
+      localStorage.setItem('authUserId', userId);
+    }
   }
 
   getAuthToken(): string | null {
     return localStorage.getItem('authToken');
   }
 
+  getAuthUserId(): string | null {
+    const stored = localStorage.getItem('authUserId');
+    if (stored) return stored;
+    const token = this.getAuthToken();
+    return token ? this.readUserIdFromToken(token) : null;
+  }
+
   clearAuthToken(): void {
     localStorage.removeItem('authToken');
+    localStorage.removeItem('authUserId');
+  }
+
+  private readUserIdFromToken(token: string): string | null {
+    try {
+      const part = token.split('.')[1];
+      if (!part) return null;
+      const padded = part.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (part.length % 4)) % 4);
+      const payload = JSON.parse(atob(padded)) as { userId?: string };
+      return typeof payload.userId === 'string' ? payload.userId : null;
+    } catch {
+      return null;
+    }
   }
 }
 

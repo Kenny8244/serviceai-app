@@ -49,19 +49,24 @@ const verticals: Vertical[] = [
 
 interface VerticalSelectionPageProps {
   onBack: () => void
-  onVerticalSelect: (verticalId: string) => void
+  onVerticalSelect: (verticalId: string) => void | Promise<void>
 }
 
 export function VerticalSelectionPage({ onBack, onVerticalSelect }: VerticalSelectionPageProps) {
   const [selectedVertical, setSelectedVertical] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
   const handleVerticalSelect = (verticalId: string) => {
     setSelectedVertical(verticalId)
   }
 
-  const handleContinue = () => {
-    if (selectedVertical) {
-      onVerticalSelect(selectedVertical)
+  const handleContinue = async () => {
+    if (!selectedVertical || isSaving) return
+    setIsSaving(true)
+    try {
+      await onVerticalSelect(selectedVertical)
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -184,7 +189,7 @@ export function VerticalSelectionPage({ onBack, onVerticalSelect }: VerticalSele
         <div className="text-center">
           <Button
             onClick={handleContinue}
-            disabled={!selectedVertical}
+            disabled={!selectedVertical || isSaving}
             variant={selectedVertical ? 'default' : 'outline'}
             className={`
               px-12 py-4 text-lg font-semibold rounded-2xl transition-all duration-300 text-black
@@ -196,6 +201,7 @@ export function VerticalSelectionPage({ onBack, onVerticalSelect }: VerticalSele
             `}
           >
             Continue with {selectedVertical ? verticals.find((v) => v.id === selectedVertical)?.name : "your selection"}
+            {isSaving ? "…" : ""}
             <ArrowRight className="ml-3 h-5 w-5" />
           </Button>
         </div>

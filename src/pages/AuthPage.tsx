@@ -5,11 +5,11 @@ import { Label } from "@/components/ui/label"
 import { FormField, nativeSelectClassName } from "@/components/ui/form-field"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Sparkles, ArrowRight, Shield, Zap, Brain, Users } from "lucide-react"
-import { apiService, type CreateUserRequest, type LoginRequest } from "@/services/api"
+import { apiService, type AuthResponse, type CreateUserRequest, type LoginRequest } from "@/services/api"
 import { toAuthMessage } from "@/lib/userFacingError"
 
 interface AuthPageProps {
-  onAuthSuccess: () => void
+  onAuthSuccess: (response: AuthResponse, options?: { isNewAccount?: boolean }) => void | Promise<void>
 }
 
 export function AuthPage({ onAuthSuccess }: AuthPageProps) {
@@ -76,7 +76,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
       }
 
       apiService.setAuthToken(response.token)
-      onAuthSuccess()
+      await onAuthSuccess(response, { isNewAccount: activeTab === "signup" })
     } catch (error) {
       console.error("Auth error:", error)
       setFormError(toAuthMessage(error))
@@ -92,7 +92,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
     try {
       const response = await apiService.demoLogin()
       apiService.setAuthToken(response.token)
-      onAuthSuccess()
+      await onAuthSuccess(response)
     } catch (error) {
       console.error("Demo login error:", error)
       setFormError(toAuthMessage(error))

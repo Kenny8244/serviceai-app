@@ -17,13 +17,13 @@ import {
   createUser,
   findUserByEmail,
   findUserById,
-  getUserVertical,
   listAssets,
   listServiceRequests,
   saveAssets,
   saveServiceRequests,
   selectVertical,
 } from './lib/store'
+import { isValidVerticalId, resolveUserVertical, saveTenantVertical } from './lib/tenantVertical'
 import {
   AI_FORMS,
   AI_SEARCH_DATA,
@@ -103,7 +103,12 @@ app.post('/api/auth/register', async (c) => {
         email: account.email,
         organizationId: account.tenantId,
       })
-      return c.json({ user: publicUser(account), token, expiresAt: getTokenExpiration() }, 201)
+      return c.json({
+        user: publicUser(account),
+        token,
+        expiresAt: getTokenExpiration(),
+        selectedVertical: null,
+      }, 201)
     } catch (error) {
       if (error instanceof AuthHttpError) return c.json({ error: error.message }, error.status)
       console.error('Registration error:', error)
@@ -132,7 +137,12 @@ app.post('/api/auth/register', async (c) => {
   await createUser(c.env.DEMO_KV, user)
 
   const token = await generateToken(c.env, { userId: user.id, email: user.email })
-  return c.json({ user: publicUser(user), token, expiresAt: getTokenExpiration() }, 201)
+  return c.json({
+    user: publicUser(user),
+    token,
+    expiresAt: getTokenExpiration(),
+    selectedVertical: null,
+  }, 201)
 })
 
 app.post('/api/auth/login', async (c) => {
@@ -147,7 +157,13 @@ app.post('/api/auth/login', async (c) => {
         email: account.email,
         organizationId: account.tenantId,
       })
-      return c.json({ user: publicUser(account), token, expiresAt: getTokenExpiration() })
+      const selectedVertical = await resolveUserVertical(
+        c.env,
+        c.env.DEMO_KV,
+        account.id,
+        account.tenantId
+      )
+      return c.json({ user: publicUser(account), token, expiresAt: getTokenExpiration(), selectedVertical })
     } catch (error) {
       if (error instanceof AuthHttpError) return c.json({ error: error.message }, error.status)
       console.error('Login error:', error)
@@ -161,7 +177,8 @@ app.post('/api/auth/login', async (c) => {
   }
 
   const token = await generateToken(c.env, { userId: user.id, email: user.email })
-  return c.json({ user: publicUser(user), token, expiresAt: getTokenExpiration() })
+  const selectedVertical = await resolveUserVertical(c.env, c.env.DEMO_KV, user.id)
+  return c.json({ user: publicUser(user), token, expiresAt: getTokenExpiration(), selectedVertical })
 })
 
 app.post('/api/auth/demo', async (c) => {
@@ -173,7 +190,13 @@ app.post('/api/auth/demo', async (c) => {
         email: account.email,
         organizationId: account.tenantId,
       })
-      return c.json({ user: publicUser(account), token, expiresAt: getTokenExpiration() })
+      const selectedVertical = await resolveUserVertical(
+        c.env,
+        c.env.DEMO_KV,
+        account.id,
+        account.tenantId
+      )
+      return c.json({ user: publicUser(account), token, expiresAt: getTokenExpiration(), selectedVertical })
     } catch (error) {
       if (error instanceof AuthHttpError) return c.json({ error: error.message }, error.status)
       console.error('Demo login error:', error)
@@ -203,7 +226,8 @@ app.post('/api/auth/demo', async (c) => {
   }
 
   const token = await generateToken(c.env, { userId: user.id, email: user.email })
-  return c.json({ user: publicUser(user), token, expiresAt: getTokenExpiration() })
+  const selectedVertical = await resolveUserVertical(c.env, c.env.DEMO_KV, user.id)
+  return c.json({ user: publicUser(user), token, expiresAt: getTokenExpiration(), selectedVertical })
 })
 
 // ── Verticals ─────────────────────────────────────────────────────────────────
@@ -213,14 +237,16 @@ app.get('/api/verticals', (c) => c.json({ verticals: VERTICALS }))
 app.post('/api/verticals/select', requireAuth, async (c) => {
   const { verticalId } = await c.req.json<{ verticalId: string }>()
   if (!verticalId) return c.json({ error: 'Vertical ID is required' }, 400)
+  if (!isValidVerticalId(verticalId)) return c.json({ error: 'Invalid vertical' }, 400)
   const user = c.get('user')
   const selected = await selectVertical(c.env.DEMO_KV, user.userId, verticalId)
+  await saveTenantVertical(c.env, user.organizationId, verticalId)
   return c.json(selected)
 })
 
 app.get('/api/verticals/selected', requireAuth, async (c) => {
   const user = c.get('user')
-  const selected = await getUserVertical(c.env.DEMO_KV, user.userId)
+  const selected = await resolveUserVertical(c.env, c.env.DEMO_KV, user.userId, user.organizationId)
   return c.json(selected)
 })
 
