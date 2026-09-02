@@ -5,6 +5,14 @@ import type { Env, JwtPayload, ServiceRequest, StoredUser, Variables } from './t
 import { generateToken, getTokenExpiration, publicUser, verifyToken } from './lib/jwt'
 import { generateId, hashPassword, verifyPassword } from './lib/crypto'
 import {
+  AuthHttpError,
+  ensureDemoAccount,
+  findAccountById,
+  hasSupabaseLogin,
+  loginAccount,
+  registerAccount,
+} from './lib/authAccount'
+import {
   VERTICALS,
   createUser,
   findUserByEmail,
@@ -47,8 +55,13 @@ const requireAuth = createMiddleware<{ Bindings: Env; Variables: Variables }>(as
   const payload = await verifyToken(c.env, token)
   if (!payload) return c.json({ error: 'Invalid or expired token' }, 403)
 
-  const user = await findUserById(c.env.DEMO_KV, payload.userId)
-  if (!user) return c.json({ error: 'User not found' }, 403)
+  if (hasSupabaseLogin(c.env)) {
+    const account = await findAccountById(c.env, payload.userId)
+    if (!account) return c.json({ error: 'User not found' }, 403)
+  } else {
+    const user = await findUserById(c.env.DEMO_KV, payload.userId)
+    if (!user) return c.json({ error: 'User not found' }, 403)
+  }
 
   c.set('user', payload)
   await next()
@@ -82,6 +95,22 @@ app.post('/api/auth/register', async (c) => {
   }
   if (body.password.length < 8) return c.json({ error: 'Password must be at least 8 characters long' }, 400)
 
+  if (hasSupabaseLogin(c.env)) {
+    try {
+      const account = await registerAccount(c.env, body)
+      const token = await generateToken(c.env, {
+        userId: account.id,
+        email: account.email,
+        organizationId: account.tenantId,
+      })
+      return c.json({ user: publicUser(account), token, expiresAt: getTokenExpiration() }, 201)
+    } catch (error) {
+      if (error instanceof AuthHttpError) return c.json({ error: error.message }, error.status)
+      console.error('Registration error:', error)
+      return c.json({ error: 'Internal server error' }, 500)
+    }
+  }
+
   const existing = await findUserByEmail(c.env.DEMO_KV, body.email)
   if (existing) return c.json({ error: 'User with this email already exists' }, 409)
 
@@ -110,6 +139,22 @@ app.post('/api/auth/login', async (c) => {
   const { email, password } = await c.req.json<{ email: string; password: string }>()
   if (!email || !password) return c.json({ error: 'Email and password are required' }, 400)
 
+  if (hasSupabaseLogin(c.env)) {
+    try {
+      const account = await loginAccount(c.env, email, password)
+      const token = await generateToken(c.env, {
+        userId: account.id,
+        email: account.email,
+        organizationId: account.tenantId,
+      })
+      return c.json({ user: publicUser(account), token, expiresAt: getTokenExpiration() })
+    } catch (error) {
+      if (error instanceof AuthHttpError) return c.json({ error: error.message }, error.status)
+      console.error('Login error:', error)
+      return c.json({ error: 'Internal server error' }, 500)
+    }
+  }
+
   const user = await findUserByEmail(c.env.DEMO_KV, email)
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
     return c.json({ error: 'Invalid email or password' }, 401)
@@ -120,6 +165,22 @@ app.post('/api/auth/login', async (c) => {
 })
 
 app.post('/api/auth/demo', async (c) => {
+  if (hasSupabaseLogin(c.env)) {
+    try {
+      const account = await ensureDemoAccount(c.env)
+      const token = await generateToken(c.env, {
+        userId: account.id,
+        email: account.email,
+        organizationId: account.tenantId,
+      })
+      return c.json({ user: publicUser(account), token, expiresAt: getTokenExpiration() })
+    } catch (error) {
+      if (error instanceof AuthHttpError) return c.json({ error: error.message }, error.status)
+      console.error('Demo login error:', error)
+      return c.json({ error: 'Internal server error' }, 500)
+    }
+  }
+
   const email = 'demo@simpleserviceai.com'
   let user = await findUserByEmail(c.env.DEMO_KV, email)
   if (!user) {

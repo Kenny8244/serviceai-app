@@ -1,3 +1,9 @@
+-- OBSOLETE — do not run on a new Supabase project.
+-- Canonical MVP schema (SCRUM-28):
+--   db/migrations/20240207000000_complete_setup.sql
+-- Users are now public.profiles referencing auth.users (no password_hash).
+-- This incremental dump is kept only for historical reference.
+
 -- Create users table first
 CREATE TABLE IF NOT EXISTS users (
     user_id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,

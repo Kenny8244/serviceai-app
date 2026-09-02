@@ -8,10 +8,12 @@ export function getSupabase(env: Env): SupabaseClient | null {
 }
 
 export function getSupabaseAdmin(env: Env): SupabaseClient | null {
-  if (!env.SUPABASE_URL) return null
-  const key = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY
-  if (!key || env.SUPABASE_URL.includes('your-supabase')) return null
-  return createClient(env.SUPABASE_URL, key)
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return null
+  if (env.SUPABASE_URL.includes('your-supabase') || env.SUPABASE_URL.includes('your-project-ref')) return null
+  if (env.SUPABASE_SERVICE_ROLE_KEY.includes('your-supabase') || env.SUPABASE_SERVICE_ROLE_KEY.includes('replace-with')) {
+    return null
+  }
+  return createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
 }
 
 export function hasSupabase(env: Env): boolean {

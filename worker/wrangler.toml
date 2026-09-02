@@ -9,6 +9,10 @@ workers_dev = false
 [vars]
 FRONTEND_URL = "https://serviceai-app.pages.dev"
 
+[dev]
+ip = "127.0.0.1"
+port = 8787
+
 # IDs omitted so the first deploy on a new account can provision KV automatically.
 [[kv_namespaces]]
 binding = "DEMO_KV"

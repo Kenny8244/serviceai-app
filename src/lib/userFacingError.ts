@@ -12,7 +12,46 @@ function getRawMessage(error: unknown): string {
   return ''
 }
 
-/** Maps API/network failures to short copy a non-technical user can act on. */
+export function toAuthMessage(error: unknown): string {
+  const status = getStatus(error)
+  const raw = getRawMessage(error)
+  const message = raw.toLowerCase()
+
+  if (
+    error instanceof TypeError ||
+    message.includes('failed to fetch') ||
+    message.includes('network error') ||
+    message.includes('load failed')
+  ) {
+    return 'We could not connect to the server. Check your internet connection and try again.'
+  }
+
+  if (status === 401 || message.includes('invalid email or password')) {
+    return 'Invalid email or password'
+  }
+
+  if (status === 409 || message.includes('already exists')) {
+    return 'An account with this email already exists'
+  }
+
+  if (status === 400 && raw && raw.length < 140) {
+    return raw
+  }
+
+  if (status === 503 || message.includes('not configured')) {
+    return 'Sign-in is not available right now. Please try again later.'
+  }
+
+  if ((status != null && status >= 500) || message.includes('internal server')) {
+    return 'The server had a problem. Please try again in a moment.'
+  }
+
+  if (raw && raw.length < 140 && !message.includes('exception') && !message.includes('stack')) {
+    return raw
+  }
+
+  return 'Something went wrong. Please try again.'
+}
 export function toUserMessage(error: unknown): string {
   const status = getStatus(error)
   const raw = getRawMessage(error)

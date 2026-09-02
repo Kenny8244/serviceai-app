@@ -6,6 +6,7 @@ import { FormField, nativeSelectClassName } from "@/components/ui/form-field"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Sparkles, ArrowRight, Shield, Zap, Brain, Users } from "lucide-react"
 import { apiService, type CreateUserRequest, type LoginRequest } from "@/services/api"
+import { toAuthMessage } from "@/lib/userFacingError"
 
 interface AuthPageProps {
   onAuthSuccess: () => void
@@ -17,6 +18,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
   const [password, setPassword] = useState("")
   const [rememberMe, setRememberMe] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
   
   // Signup form fields
   const [firstName, setFirstName] = useState("")
@@ -30,28 +32,28 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // Basic validation
+    setFormError(null)
+
     if (activeTab === "signup") {
       if (password !== confirmPassword) {
-        alert("Passwords do not match!")
+        setFormError("Passwords do not match")
         return
       }
       if (password.length < 8) {
-        alert("Password must be at least 8 characters long!")
+        setFormError("Password must be at least 8 characters long")
         return
       }
       if (!firstName || !lastName || !companyName || !phoneNumber) {
-        alert("Please fill in all required fields!")
+        setFormError("Please fill in all required fields")
         return
       }
     }
-    
+
     setIsLoading(true)
-    
+
     try {
-      let response;
-      
+      let response
+
       if (activeTab === "signup") {
         const userData: CreateUserRequest = {
           email,
@@ -63,41 +65,39 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
           companySize,
           industry,
           password,
-        };
-        response = await apiService.register(userData);
+        }
+        response = await apiService.register(userData)
       } else {
         const credentials: LoginRequest = {
           email,
           password,
-        };
-        response = await apiService.login(credentials);
+        }
+        response = await apiService.login(credentials)
       }
-      
-      // Store the auth token
-      apiService.setAuthToken(response.token);
-      
-      // Navigate to next page
-      onAuthSuccess();
+
+      apiService.setAuthToken(response.token)
+      onAuthSuccess()
     } catch (error) {
-      console.error('Auth error:', error);
-      alert(error instanceof Error ? error.message : 'Authentication failed');
+      console.error("Auth error:", error)
+      setFormError(toAuthMessage(error))
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
   }
 
   const handleDemo = async () => {
     setIsLoading(true)
-    
+    setFormError(null)
+
     try {
-      const response = await apiService.demoLogin();
-      apiService.setAuthToken(response.token);
-      onAuthSuccess();
+      const response = await apiService.demoLogin()
+      apiService.setAuthToken(response.token)
+      onAuthSuccess()
     } catch (error) {
-      console.error('Demo login error:', error);
-      alert('Demo login failed');
+      console.error("Demo login error:", error)
+      setFormError(toAuthMessage(error))
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
   }
 
@@ -117,6 +117,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
 
   const handleTabChange = (tab: "login" | "signup") => {
     setActiveTab(tab)
+    setFormError(null)
     clearForm()
   }
 
@@ -242,6 +243,14 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
 
               <CardContent className="space-y-6">
                 <form onSubmit={handleSubmit} className="space-y-6">
+                  {formError ? (
+                    <div
+                      role="alert"
+                      className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+                    >
+                      {formError}
+                    </div>
+                  ) : null}
                   {activeTab === "signup" ? (
                     <>
                       {/* Personal Information */}

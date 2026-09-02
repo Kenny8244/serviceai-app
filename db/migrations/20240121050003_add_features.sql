@@ -1,3 +1,8 @@
+-- OBSOLETE — do not run on a new Supabase project.
+-- Canonical MVP schema (SCRUM-28):
+--   db/migrations/20240207000000_complete_setup.sql
+-- This incremental dump is kept only for historical reference.
+
 -- Add missing features (users table already exists)
 
 -- Add metadata and status to tenants

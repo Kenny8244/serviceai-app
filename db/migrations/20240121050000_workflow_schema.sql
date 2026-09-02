@@ -1,3 +1,8 @@
+-- OBSOLETE — do not run on a new Supabase project.
+-- Canonical MVP schema (SCRUM-28):
+--   db/migrations/20240207000000_complete_setup.sql
+-- This incremental workflow dump is kept only for historical reference.
+
 -- Migration: Workflow Schema
 -- This migration sets up the core workflow-based schema for the application
 

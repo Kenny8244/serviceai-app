@@ -1,5 +1,5 @@
 import { SignJWT, jwtVerify } from 'jose'
-import type { JwtPayload } from './types'
+import type { JwtPayload } from '../types'
 
 function getSecret(env: { JWT_SECRET?: string }) {
   return new TextEncoder().encode(env.JWT_SECRET || 'serviceai-dev-secret')
