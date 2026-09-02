@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -8,8 +8,9 @@ import { FormField, nativeSelectClassName } from '@/components/ui/form-field'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { PageShell } from '@/components/layout/PageShell'
 import { SettingsNav } from '@/components/settings/SettingsNav'
-import { getSelectedVertical } from '@/lib/verticalStorage'
+import { clearSelectedVertical, getSelectedVertical } from '@/lib/verticalStorage'
 import { getVerticalDisplayName } from '@/lib/verticalContent'
+import { apiService } from '@/services/api'
 import {
   Settings as SettingsIcon,
   Bot,
@@ -25,7 +26,8 @@ import {
   Ticket,
   CheckCircle,
   AlertCircle,
-  Plus
+  Plus,
+  LogOut
 } from 'lucide-react'
 
 interface SettingsSection {
@@ -39,6 +41,7 @@ interface SettingsSection {
 const SETTINGS_SECTIONS = ['general', 'ai', 'dashboard', 'assets', 'team', 'integrations'] as const
 
 export function Settings() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const sectionFromUrl = searchParams.get('section')
   const [activeSection, setActiveSection] = useState(
@@ -103,6 +106,12 @@ export function Settings() {
   const handleReset = () => {
     // TODO: Reset to defaults
     console.log('Settings reset to defaults')
+  }
+
+  const handleLogout = () => {
+    apiService.clearAuthToken()
+    clearSelectedVertical()
+    navigate('/auth', { replace: true })
   }
 
   const updateSetting = (category: keyof typeof settings, key: string, value: any) => {
@@ -188,6 +197,19 @@ export function Settings() {
                 </div>
               ))}
             </div>
+          </div>
+
+          <div className="flex items-center justify-between p-4 border border-slate-200 dark:border-slate-700 rounded-lg">
+            <div>
+              <h4 className="font-medium text-slate-900 dark:text-slate-100">Session</h4>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Sign out of this device. You will need to log in again to continue.
+              </p>
+            </div>
+            <Button variant="outline" onClick={handleLogout}>
+              <LogOut className="h-4 w-4 mr-2" />
+              Log out
+            </Button>
           </div>
         </div>
       )
