@@ -105,9 +105,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
         response = await apiService.login(credentials)
       }
 
-      apiService.setAuthToken(response.token, {
-        persist: activeTab === 'login' && rememberMe,
-      })
+      apiService.setAuthToken(response.token)
       await onAuthSuccess(response, { isNewAccount: activeTab === "signup" })
     } catch (error) {
       console.error("Auth error:", error)

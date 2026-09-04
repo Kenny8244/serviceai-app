@@ -70,8 +70,13 @@ export function toUserMessage(error: unknown): string {
     status === 401 ||
     message.includes('unauthorized') ||
     message.includes('authentication required') ||
-    message.includes('access token required')
+    message.includes('access token required') ||
+    message.includes('invalid or expired token')
   ) {
+    return 'Your session has expired. Please sign in again.'
+  }
+
+  if (status === 403 && (message.includes('user not found') || message.includes('invalid or expired'))) {
     return 'Your session has expired. Please sign in again.'
   }
 

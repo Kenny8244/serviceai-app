@@ -1,5 +1,6 @@
 "use client"
 
+import { useSyncExternalStore } from "react"
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocation } from "react-router-dom"
 import {
   AuthPage,
@@ -23,7 +24,13 @@ import {
   getStoredVerticalForUser,
   clearSelectedVertical,
 } from "@/lib/verticalStorage"
+import { getAuthSessionVersion, subscribeAuthSession } from "@/lib/authSession"
 import { apiService, type AuthResponse } from "@/services/api"
+
+function useIsAuthenticated() {
+  useSyncExternalStore(subscribeAuthSession, getAuthSessionVersion, () => 0)
+  return apiService.isAuthenticated()
+}
 
 async function persistVertical(verticalId: string) {
   try {
@@ -41,6 +48,7 @@ function VerticalRoute() {
       onVerticalSelect={async (verticalId: string) => {
         setSelectedVertical(verticalId, apiService.getAuthUserId() || undefined)
         await persistVertical(verticalId)
+        if (!apiService.isAuthenticated()) return
         navigate("/onboarding", { state: { verticalId }, replace: true })
       }}
     />
@@ -49,6 +57,7 @@ function VerticalRoute() {
 
 function AuthRoute() {
   const navigate = useNavigate()
+  const isAuthenticated = useIsAuthenticated()
 
   const continueAfterAuth = async (response: AuthResponse, options?: { isNewAccount?: boolean }) => {
     const userId = response.user.id
@@ -76,6 +85,10 @@ function AuthRoute() {
       }
     }
 
+    if (!apiService.isAuthenticated()) {
+      return
+    }
+
     if (verticalId) {
       setSelectedVertical(verticalId, userId)
       navigate("/dashboard", { replace: true })
@@ -84,6 +97,10 @@ function AuthRoute() {
 
     clearSelectedVertical()
     navigate("/vertical-selection", { replace: true })
+  }
+
+  if (isAuthenticated) {
+    return <SavedVerticalRedirect />
   }
 
   return <AuthPage onAuthSuccess={continueAfterAuth} />
@@ -113,7 +130,8 @@ function SavedVerticalRedirect() {
 }
 
 function RequireAuth() {
-  if (!apiService.isAuthenticated()) {
+  const isAuthenticated = useIsAuthenticated()
+  if (!isAuthenticated) {
     return <Navigate to="/auth" replace />
   }
   return <Outlet />

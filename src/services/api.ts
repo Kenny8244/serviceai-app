@@ -1,3 +1,5 @@
+import { isPublicAuthUrl, notifyAuthSessionChanged } from '@/lib/authSession';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 export interface User {
@@ -229,9 +231,17 @@ class ApiService {
       const payload = await response.json().catch(() => ({ error: 'Network error' }));
       const error = new Error(payload.error || 'Request failed') as Error & { status?: number };
       error.status = response.status;
+      if (this.shouldEndSession(response)) {
+        this.clearAuthToken();
+      }
       throw error;
     }
     return response.json();
+  }
+
+  private shouldEndSession(response: Response): boolean {
+    if (response.status !== 401 && response.status !== 403) return false;
+    return !isPublicAuthUrl(response.url);
   }
 
   // Authentication endpoints
@@ -701,29 +711,47 @@ class ApiService {
   }
 
   // Token management
-  setAuthToken(token: string, options?: { persist?: boolean }): void {
-    const persist = Boolean(options?.persist);
-    const store = persist ? localStorage : sessionStorage;
-    const other = persist ? sessionStorage : localStorage;
-
-    other.removeItem('authToken');
-    other.removeItem('authUserId');
-    store.setItem('authToken', token);
+  /**
+   * Always localStorage so the session survives browser close.
+   * JWT lifetime is 1d by default, 30d when Remember me was used at login.
+   */
+  setAuthToken(token: string): void {
+    sessionStorage.removeItem('authToken');
+    sessionStorage.removeItem('authUserId');
+    localStorage.setItem('authToken', token);
     const userId = this.readUserIdFromToken(token);
     if (userId) {
-      store.setItem('authUserId', userId);
+      localStorage.setItem('authUserId', userId);
+    } else {
+      localStorage.removeItem('authUserId');
     }
   }
 
   getAuthToken(): string | null {
-    return sessionStorage.getItem('authToken') || localStorage.getItem('authToken');
+    this.promoteSessionToken();
+    return localStorage.getItem('authToken');
   }
 
   getAuthUserId(): string | null {
-    const stored = sessionStorage.getItem('authUserId') || localStorage.getItem('authUserId');
+    this.promoteSessionToken();
+    const stored = localStorage.getItem('authUserId');
     if (stored) return stored;
-    const token = this.getAuthToken();
+    const token = localStorage.getItem('authToken');
     return token ? this.readUserIdFromToken(token) : null;
+  }
+
+  private promoteSessionToken(): void {
+    const sessionToken = sessionStorage.getItem('authToken');
+    if (!sessionToken || localStorage.getItem('authToken')) {
+      return;
+    }
+    localStorage.setItem('authToken', sessionToken);
+    const sessionUserId = sessionStorage.getItem('authUserId');
+    if (sessionUserId) {
+      localStorage.setItem('authUserId', sessionUserId);
+    }
+    sessionStorage.removeItem('authToken');
+    sessionStorage.removeItem('authUserId');
   }
 
   isAuthenticated(): boolean {
@@ -731,21 +759,27 @@ class ApiService {
     if (!token) return false;
     const payload = this.readTokenPayload(token);
     if (!payload) {
-      this.clearAuthToken();
+      this.clearAuthToken({ notify: false });
       return false;
     }
     if (typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now()) {
-      this.clearAuthToken();
+      this.clearAuthToken({ notify: false });
       return false;
     }
     return true;
   }
 
-  clearAuthToken(): void {
+  clearAuthToken(options?: { notify?: boolean }): void {
+    const hadToken = Boolean(
+      sessionStorage.getItem('authToken') || localStorage.getItem('authToken')
+    );
     localStorage.removeItem('authToken');
     localStorage.removeItem('authUserId');
     sessionStorage.removeItem('authToken');
     sessionStorage.removeItem('authUserId');
+    if (hadToken && options?.notify !== false) {
+      notifyAuthSessionChanged();
+    }
   }
 
   private readUserIdFromToken(token: string): string | null {
