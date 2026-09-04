@@ -126,6 +126,7 @@ export interface Asset {
   supplier: string | null
   location: string | null
   tags: string[] | null
+  avatar: string | null
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -176,6 +177,7 @@ function normalizeAsset(rawValue: unknown): Asset {
     supplier: (pickRaw(raw, 'supplier') as string | null) ?? null,
     location: (pickRaw(raw, 'location') as string | null) ?? null,
     tags: Array.isArray(raw.tags) ? (raw.tags as string[]) : null,
+    avatar: (pickRaw(raw, 'avatar') as string | null) ?? null,
     isActive: pickRaw(raw, 'isActive', 'is_active') !== false,
     createdAt: String(pickRaw(raw, 'createdAt', 'created_at') ?? ''),
     updatedAt: String(pickRaw(raw, 'updatedAt', 'updated_at') ?? ''),
@@ -598,22 +600,49 @@ class ApiService {
     return this.handleResponse(response);
   }
 
-  async createAsset(assetData: any) {
+  async createAsset(assetData: {
+    name: string
+    category?: string
+    sku?: string
+    quantity?: number
+    minQuantity?: number
+    unitCost?: number | null
+    supplier?: string
+    location?: string
+    description?: string
+    avatar?: string | null
+  }): Promise<Asset> {
     const response = await fetch(`${API_BASE_URL}/assets`, {
       method: 'POST',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify(assetData),
     });
-    return this.handleResponse(response);
+    const data = await this.handleResponse<unknown>(response);
+    return normalizeAsset(data);
   }
 
-  async updateAsset(assetId: string, updates: any) {
+  async updateAsset(
+    assetId: string,
+    updates: {
+      name: string
+      category?: string
+      sku?: string
+      quantity?: number
+      minQuantity?: number
+      unitCost?: number | null
+      supplier?: string
+      location?: string
+      description?: string
+      avatar?: string | null
+    }
+  ): Promise<Asset> {
     const response = await fetch(`${API_BASE_URL}/assets/${assetId}`, {
       method: 'PUT',
       headers: this.getAuthHeaders(true),
       body: JSON.stringify(updates),
     });
-    return this.handleResponse(response);
+    const data = await this.handleResponse<unknown>(response);
+    return normalizeAsset(data);
   }
 
   async deleteAsset(assetId: string) {

@@ -5,6 +5,7 @@ import { Sidebar } from './Sidebar'
 import { Button } from '@/components/ui/button'
 import { getDesktopSidebarCollapsed, setDesktopSidebarCollapsed } from '@/lib/sidebarStorage'
 import { HeaderSlot, LayoutSlotsProvider } from './LayoutSlots'
+import { ImportProgressPanel } from './ImportProgressPanel'
 
 const DESKTOP_QUERY = '(min-width: 1024px)'
 
@@ -126,6 +127,7 @@ export function AppLayout() {
             <Outlet />
           </div>
         </div>
+        <ImportProgressPanel />
       </div>
     </LayoutSlotsProvider>
   )

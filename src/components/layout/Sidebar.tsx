@@ -62,7 +62,7 @@ export function Sidebar({
       icon: <Package className="h-5 w-5" />,
       path: '/assets',
       children: [
-        { id: 'import', label: 'Import Data', icon: <Plus className="h-4 w-4" />, path: '/assets/import', disabled: true },
+        { id: 'import', label: 'Import Data', icon: <Plus className="h-4 w-4" />, path: '/assets/import' },
         { id: 'manage', label: 'Manage Items', icon: <Package className="h-4 w-4" />, path: '/assets/manage', disabled: true },
         { id: 'reports', label: 'Inventory Reports', icon: <BarChart3 className="h-4 w-4" />, path: '/assets/reports', disabled: true },
       ],

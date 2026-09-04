@@ -17,12 +17,11 @@ import {
   createUser,
   findUserByEmail,
   findUserById,
-  listAssets,
   listServiceRequests,
-  saveAssets,
   saveServiceRequests,
   selectVertical,
 } from './lib/store'
+import { AssetsHttpError, createWorkspaceAsset, deleteWorkspaceAsset, getWorkspaceAsset, listWorkspaceAssets, updateWorkspaceAsset } from './lib/assets'
 import { isValidVerticalId, resolveUserVertical, saveTenantVertical } from './lib/tenantVertical'
 import {
   AI_FORMS,
@@ -380,64 +379,71 @@ app.patch('/api/service-requests/:id', requireAuth, async (c) => {
 // ── Assets ────────────────────────────────────────────────────────────────────
 
 app.get('/api/assets', requireAuth, async (c) => {
-  const assets = await listAssets(c.env.DEMO_KV, c.get('user').userId)
-  return c.json(assets.filter((a) => a.is_active))
+  try {
+    const assets = await listWorkspaceAssets(c.env, c.get('user').userId)
+    return c.json(assets.filter((a) => a.is_active))
+  } catch (error) {
+    if (error instanceof AssetsHttpError) return c.json({ error: error.message }, error.status)
+    throw error
+  }
 })
 
 app.get('/api/assets/:id', requireAuth, async (c) => {
-  const asset = (await listAssets(c.env.DEMO_KV, c.get('user').userId)).find((a) => a.id === c.req.param('id') && a.is_active)
-  if (!asset) return c.json({ error: 'Asset not found' }, 404)
-  return c.json(asset)
+  try {
+    const asset = await getWorkspaceAsset(c.env, c.get('user').userId, c.req.param('id'))
+    if (!asset || !asset.is_active) return c.json({ error: 'Asset not found' }, 404)
+    return c.json(asset)
+  } catch (error) {
+    if (error instanceof AssetsHttpError) return c.json({ error: error.message }, error.status)
+    throw error
+  }
 })
 
-app.post('/api/assets', requireAuth, async (c) => {
-  const userId = c.get('user').userId
-  const body = await c.req.json<Record<string, unknown>>()
-  const now = new Date().toISOString()
-  const asset = {
-    id: generateId(),
-    user_id: userId,
-    name: String(body.name || 'Untitled Asset'),
-    description: (body.description as string) || null,
-    category: String(body.category || 'general'),
-    sku: (body.sku as string) || null,
-    quantity: Number(body.quantity) || 0,
-    min_quantity: Number(body.minQuantity) || 10,
-    unit_cost: body.unitCost ? Number(body.unitCost) : null,
-    supplier: (body.supplier as string) || null,
-    location: (body.location as string) || null,
-    tags: (body.tags as string[]) || null,
-    metadata: (body.metadata as Record<string, unknown>) || {},
-    is_active: true,
-    created_at: now,
-    updated_at: now,
+function assetInputFromBody(body: Record<string, unknown>) {
+  return {
+    name: String(body.name ?? ''),
+    category: typeof body.category === 'string' ? body.category : null,
+    sku: typeof body.sku === 'string' ? body.sku : null,
+    quantity: body.quantity == null || body.quantity === '' ? 0 : Number(body.quantity),
+    minQuantity: body.minQuantity == null || body.minQuantity === '' ? 0 : Number(body.minQuantity),
+    unitCost: body.unitCost == null || body.unitCost === '' ? null : Number(body.unitCost),
+    supplier: typeof body.supplier === 'string' ? body.supplier : null,
+    location: typeof body.location === 'string' ? body.location : null,
+    description: typeof body.description === 'string' ? body.description : null,
+    avatar: typeof body.avatar === 'string' ? body.avatar : null,
   }
-  const assets = await listAssets(c.env.DEMO_KV, userId)
-  assets.unshift(asset)
-  await saveAssets(c.env.DEMO_KV, userId, assets)
-  return c.json(asset, 201)
+}
+
+app.post('/api/assets', requireAuth, async (c) => {
+  try {
+    const body = await c.req.json<Record<string, unknown>>()
+    const asset = await createWorkspaceAsset(c.env, c.get('user').userId, assetInputFromBody(body))
+    return c.json(asset, 201)
+  } catch (error) {
+    if (error instanceof AssetsHttpError) return c.json({ error: error.message }, error.status)
+    throw error
+  }
 })
 
 app.put('/api/assets/:id', requireAuth, async (c) => {
-  const userId = c.get('user').userId
-  const assets = await listAssets(c.env.DEMO_KV, userId)
-  const index = assets.findIndex((a) => a.id === c.req.param('id') && a.is_active)
-  if (index === -1) return c.json({ error: 'Asset not found' }, 404)
-  const updates = await c.req.json<Record<string, unknown>>()
-  assets[index] = { ...assets[index], ...updates, updated_at: new Date().toISOString() }
-  await saveAssets(c.env.DEMO_KV, userId, assets)
-  return c.json(assets[index])
+  try {
+    const body = await c.req.json<Record<string, unknown>>()
+    const asset = await updateWorkspaceAsset(c.env, c.get('user').userId, c.req.param('id'), assetInputFromBody(body))
+    return c.json(asset)
+  } catch (error) {
+    if (error instanceof AssetsHttpError) return c.json({ error: error.message }, error.status)
+    throw error
+  }
 })
 
 app.delete('/api/assets/:id', requireAuth, async (c) => {
-  const userId = c.get('user').userId
-  const assets = await listAssets(c.env.DEMO_KV, userId)
-  const index = assets.findIndex((a) => a.id === c.req.param('id') && a.is_active)
-  if (index === -1) return c.json({ error: 'Asset not found' }, 404)
-  assets[index].is_active = false
-  assets[index].updated_at = new Date().toISOString()
-  await saveAssets(c.env.DEMO_KV, userId, assets)
-  return c.json({ success: true })
+  try {
+    await deleteWorkspaceAsset(c.env, c.get('user').userId, c.req.param('id'))
+    return c.json({ success: true })
+  } catch (error) {
+    if (error instanceof AssetsHttpError) return c.json({ error: error.message }, error.status)
+    throw error
+  }
 })
 
 app.get('/api/assets/:id/transactions', requireAuth, (c) => c.json([]))

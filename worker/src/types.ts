@@ -62,6 +62,7 @@ export interface Asset {
   supplier?: string | null
   location?: string | null
   tags?: string[] | null
+  avatar?: string | null
   metadata?: Record<string, unknown>
   is_active: boolean
   created_at: string

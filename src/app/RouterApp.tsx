@@ -14,6 +14,7 @@ import {
   Analytics,
   TeamManagement,
   AssetsPage,
+  AssetsImportPage,
 } from "@/pages"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { ThemeProvider } from "@/lib/theme"
@@ -156,6 +157,7 @@ export default function RouterApp() {
 
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/assets/import" element={<AssetsImportPage />} />
               <Route path="/assets" element={<AssetsPage />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/ai-hub" element={<AIHub />} />

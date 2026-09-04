@@ -9,6 +9,7 @@ import { SuccessBanner } from '@/components/ui/success-banner'
 import { Upload, FileText, CheckCircle, X, Sheet, Edit3 } from 'lucide-react'
 import { googleSheetsService, loadGoogleAPIs, type GoogleSheet } from '@/services/googleSheetsService'
 import { toUserMessage } from '@/lib/userFacingError'
+import { parseCsv } from '@/lib/parseCsv'
 import { ManualDataEntry } from './ManualDataEntry'
 
 interface CSVData {
@@ -101,19 +102,7 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
     setLoading(true)
 
     try {
-      const text = await file.text()
-      const lines = text.split('\n').filter(line => line.trim())
-
-      if (lines.length === 0) {
-        throw new Error('CSV file is empty')
-      }
-
-      // Parse CSV (simple implementation)
-      const headers = lines[0].split(',').map(header => header.trim().replace(/"/g, ''))
-      const rows = lines.slice(1).map(line => {
-        return line.split(',').map(cell => cell.trim().replace(/"/g, ''))
-      })
-
+      const { headers, rows } = parseCsv(await file.text())
       const csvData: CSVData = {
         headers,
         rows,

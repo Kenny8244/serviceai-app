@@ -121,19 +121,27 @@ function mapAccount(profile: ProfileRow, tenant: TenantRow | null): AuthAccount 
   }
 }
 
-async function loadTenantForProfile(client: SupabaseClient, profileId: string): Promise<TenantRow | null> {
+export async function getWorkspaceIdForProfile(
+  client: SupabaseClient,
+  profileId: string
+): Promise<string | null> {
   const { data: role } = await client
     .from('user_workspace_roles')
     .select('workspace_id')
     .eq('profile_id', profileId)
     .limit(1)
     .maybeSingle()
-  if (!role?.workspace_id) return null
+  return role?.workspace_id ?? null
+}
+
+async function loadTenantForProfile(client: SupabaseClient, profileId: string): Promise<TenantRow | null> {
+  const workspaceId = await getWorkspaceIdForProfile(client, profileId)
+  if (!workspaceId) return null
 
   const { data: workspace } = await client
     .from('workspaces')
     .select('tenant_id')
-    .eq('workspace_id', role.workspace_id)
+    .eq('workspace_id', workspaceId)
     .maybeSingle()
   if (!workspace?.tenant_id) return null
 
