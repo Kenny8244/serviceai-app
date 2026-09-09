@@ -14,15 +14,8 @@ import { getSelectedVertical } from '@/lib/verticalStorage'
 import { getVerticalContent } from '@/lib/verticalContent'
 import { toUserMessage } from '@/lib/userFacingError'
 import { apiService, type Asset, type ObjectType } from '@/services/api'
-import { assetHasQuantityField, searchableAssetValues } from '@/lib/objectTypeSchema'
-
-type StockStatus = 'ACTIVE' | 'LOW' | 'OUT'
-
-function getStockStatus(asset: Asset): StockStatus {
-  if (asset.quantity <= 0) return 'OUT'
-  if (asset.quantity <= asset.minQuantity) return 'LOW'
-  return 'ACTIVE'
-}
+import { cn } from '@/lib/utils'
+import { assetHasQuantityField, getStockStatus, searchableAssetValues, type StockStatus } from '@/lib/objectTypeSchema'
 
 function formatDate(value: string): string {
   if (!value) return '—'
@@ -130,7 +123,7 @@ function AssetsPage() {
       case 'ACTIVE':
         return 'default' as const
       case 'LOW':
-        return 'secondary' as const
+        return 'warning' as const
       case 'OUT':
         return 'destructive' as const
     }
@@ -232,7 +225,16 @@ function AssetsPage() {
                   <button
                     type="button"
                     key={asset.id}
-                    className="w-full text-left p-3 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
+                    className={cn(
+                      'w-full text-left p-3 rounded border border-transparent',
+                      status === 'LOW' &&
+                        'border-amber-300 bg-amber-50 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/50 dark:hover:bg-amber-950/70',
+                      status === 'OUT' &&
+                        'border-red-200 bg-red-50 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/40 dark:hover:bg-red-950/60',
+                      status !== 'LOW' &&
+                        status !== 'OUT' &&
+                        'hover:bg-slate-100 dark:hover:bg-slate-700'
+                    )}
                     onClick={() => navigate(`/assets/${asset.id}`)}
                   >
                     <div className="flex items-center gap-3">

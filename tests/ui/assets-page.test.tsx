@@ -42,7 +42,7 @@ const objectTypes: ObjectType[] = [
     attributes: [
       { id: 'attr-sku', name: 'sku', label: 'SKU', dataType: 'string', required: false, order: 1 },
       { id: 'attr-qty', name: 'quantity', label: 'Quantity', dataType: 'number', required: true, order: 2 },
-      { id: 'attr-min', name: 'min_quantity', label: 'Minimum quantity', dataType: 'number', required: false, order: 3 },
+      { id: 'attr-min', name: 'min_quantity', label: 'Reorder threshold', dataType: 'number', required: false, order: 3 },
       { id: 'attr-loc', name: 'location', label: 'Location', dataType: 'string', required: false, order: 6 },
     ],
   },
@@ -69,6 +69,7 @@ const objectTypes: ObjectType[] = [
     attributes: [
       { id: 'attr-iqty', name: 'quantity', label: 'Quantity', dataType: 'number', required: true, order: 1 },
       { id: 'attr-unit', name: 'unit', label: 'Unit', dataType: 'string', required: true, order: 2 },
+      { id: 'attr-min', name: 'min_quantity', label: 'Reorder threshold', dataType: 'number', required: false, order: 3 },
       { id: 'attr-perish', name: 'perishable', label: 'Perishable', dataType: 'boolean', required: false, order: 5 },
     ],
   },
@@ -157,7 +158,7 @@ describe('AssetsPage', () => {
     expect(screen.getByLabelText(/name/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^sku$/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^quantity/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/minimum quantity/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/reorder threshold/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/description/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/avatar/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Choose image' })).toBeInTheDocument()
@@ -170,9 +171,12 @@ describe('AssetsPage', () => {
     expect(screen.getByLabelText(/^capacity$/i)).toBeInTheDocument()
     expect(screen.getByText('Restaurant example schema')).toBeInTheDocument()
     expect(screen.queryByLabelText(/^sku$/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^quantity$/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/reorder threshold/i)).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText(/object type/i), { target: { value: 'type-ingredient' } })
     expect(await screen.findByLabelText(/^unit/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/reorder threshold/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^perishable$/i)).toHaveAttribute('type', 'checkbox')
 
     fireEvent.change(screen.getByLabelText(/object type/i), { target: { value: 'type-note' } })
@@ -204,10 +208,12 @@ describe('AssetsPage', () => {
       name: 'New cooler',
       sku: 'SKU-22',
       quantity: 8,
+      minQuantity: 3,
       customFields: {
         ...sample.customFields,
         sku: 'SKU-22',
         quantity: 8,
+        min_quantity: 3,
       },
     }
     const createAsset = vi.spyOn(apiService, 'createAsset').mockImplementation(async () => {
@@ -222,6 +228,7 @@ describe('AssetsPage', () => {
     fireEvent.change(await screen.findByLabelText(/^name/i), { target: { value: 'New cooler' } })
     fireEvent.change(await screen.findByLabelText(/^sku$/i), { target: { value: 'SKU-22' } })
     fireEvent.change(screen.getByLabelText(/^quantity/i), { target: { value: '8' } })
+    fireEvent.change(screen.getByLabelText(/reorder threshold/i), { target: { value: '3' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
@@ -234,9 +241,11 @@ describe('AssetsPage', () => {
         objectTypeId: 'type-product',
         sku: 'SKU-22',
         quantity: 8,
+        minQuantity: 3,
         customFields: expect.objectContaining({
           sku: 'SKU-22',
           quantity: 8,
+          min_quantity: 3,
         }),
       })
     )
@@ -280,6 +289,49 @@ describe('AssetsPage', () => {
     expect(await screen.findByText('Walk-in freezer')).toBeInTheDocument()
     expect(screen.queryByText(/Qty/)).not.toBeInTheDocument()
     expect(screen.queryByText('OUT')).not.toBeInTheDocument()
+    expect(screen.queryByText('LOW')).not.toBeInTheDocument()
+  })
+
+  it('flags inventory as LOW when quantity is at or below the reorder threshold', async () => {
+    const low: Asset = {
+      ...sample,
+      quantity: 2,
+      minQuantity: 2,
+      customFields: {
+        ...sample.customFields,
+        quantity: 2,
+        min_quantity: 2,
+      },
+    }
+    vi.spyOn(apiService, 'getAssets').mockResolvedValue([low])
+    mockObjectTypes()
+    renderAssetsPage()
+
+    expect(await screen.findByText('Walk-in cooler')).toBeInTheDocument()
+    expect(screen.getByText('LOW')).toBeInTheDocument()
+    expect(screen.getByText(/Qty 2/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Walk-in cooler/ })).toHaveClass('bg-amber-50')
+  })
+
+  it('flags inventory as OUT when quantity is zero', async () => {
+    const out: Asset = {
+      ...sample,
+      quantity: 0,
+      minQuantity: 2,
+      customFields: {
+        ...sample.customFields,
+        quantity: 0,
+        min_quantity: 2,
+      },
+    }
+    vi.spyOn(apiService, 'getAssets').mockResolvedValue([out])
+    mockObjectTypes()
+    renderAssetsPage()
+
+    expect(await screen.findByText('Walk-in cooler')).toBeInTheDocument()
+    expect(screen.getByText('OUT')).toBeInTheDocument()
+    expect(screen.queryByText('LOW')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Walk-in cooler/ })).toHaveClass('bg-red-50')
   })
 
   it('shows an error when object types fail to load', async () => {

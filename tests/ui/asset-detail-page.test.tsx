@@ -90,7 +90,7 @@ const objectTypes: ObjectType[] = [
     attributes: [
       { id: 'attr-sku', name: 'sku', label: 'SKU', dataType: 'string', required: false, order: 1 },
       { id: 'attr-qty', name: 'quantity', label: 'Quantity', dataType: 'number', required: true, order: 2 },
-      { id: 'attr-min', name: 'min_quantity', label: 'Minimum quantity', dataType: 'number', required: false, order: 3 },
+      { id: 'attr-min', name: 'min_quantity', label: 'Reorder threshold', dataType: 'number', required: false, order: 3 },
       { id: 'attr-loc', name: 'location', label: 'Location', dataType: 'string', required: false, order: 6 },
     ],
   },
@@ -117,6 +117,7 @@ const objectTypes: ObjectType[] = [
     attributes: [
       { id: 'attr-iqty', name: 'quantity', label: 'Quantity', dataType: 'number', required: true, order: 1 },
       { id: 'attr-unit', name: 'unit', label: 'Unit', dataType: 'string', required: true, order: 2 },
+      { id: 'attr-min', name: 'min_quantity', label: 'Reorder threshold', dataType: 'number', required: false, order: 3 },
       { id: 'attr-perish', name: 'perishable', label: 'Perishable', dataType: 'boolean', required: false, order: 5 },
     ],
   },
@@ -174,6 +175,90 @@ describe('AssetDetailPage', () => {
     expect(screen.getByText('No service requests yet')).toBeInTheDocument()
   })
 
+  it('flags the asset as LOW when quantity is at or below the reorder threshold', async () => {
+    vi.spyOn(apiService, 'getAssetById').mockResolvedValue({
+      ...sample,
+      quantity: 2,
+      minQuantity: 2,
+      customFields: {
+        ...sample.customFields,
+        quantity: 2,
+        min_quantity: 2,
+      },
+    })
+    mockObjectTypes()
+    renderDetail('/assets/obj-1')
+
+    expect(await screen.findByText('LOW')).toBeInTheDocument()
+    expect(screen.getByText('Reorder when at or below 2')).toBeInTheDocument()
+  })
+
+  it('does not show stock status for types without a quantity field', async () => {
+    vi.spyOn(apiService, 'getAssetById').mockResolvedValue({
+      ...sample,
+      id: 'obj-fz',
+      name: 'Walk-in freezer',
+      objectTypeId: 'type-freezer',
+      objectTypeName: 'Freezer',
+      sku: null,
+      quantity: 0,
+      minQuantity: 0,
+      customFields: { location: 'Dock', temperature: -18, capacity: 400 },
+    })
+    mockObjectTypes()
+    renderDetail('/assets/obj-fz')
+
+    expect(await screen.findByRole('heading', { name: 'Walk-in freezer' })).toBeInTheDocument()
+    expect(screen.queryByText('OUT')).not.toBeInTheDocument()
+    expect(screen.queryByText('LOW')).not.toBeInTheDocument()
+    expect(screen.queryByText('ACTIVE')).not.toBeInTheDocument()
+    expect(screen.queryByText('Stock')).not.toBeInTheDocument()
+  })
+
+  it('persists a changed reorder threshold through updateAsset', async () => {
+    const updated: Asset = {
+      ...sample,
+      quantity: 3,
+      minQuantity: 3,
+      customFields: {
+        ...sample.customFields,
+        quantity: 3,
+        min_quantity: 3,
+      },
+    }
+    vi.spyOn(apiService, 'getAssetById').mockResolvedValue(sample)
+    mockObjectTypes()
+    const updateAsset = vi.spyOn(apiService, 'updateAsset').mockResolvedValue(updated)
+    renderDetail('/assets/obj-1')
+
+    await screen.findByRole('heading', { name: 'Walk-in cooler' })
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Asset' })
+    await waitFor(() => {
+      expect(screen.getByLabelText(/^quantity/i)).toHaveValue(12)
+    })
+    fireEvent.change(screen.getByLabelText(/^quantity/i), { target: { value: '3' } })
+    fireEvent.change(screen.getByLabelText(/reorder threshold/i), { target: { value: '3' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Edit Asset' })).not.toBeInTheDocument()
+    })
+    expect(updateAsset).toHaveBeenCalledWith(
+      'obj-1',
+      expect.objectContaining({
+        quantity: 3,
+        minQuantity: 3,
+        customFields: expect.objectContaining({
+          quantity: 3,
+          min_quantity: 3,
+        }),
+      })
+    )
+    expect(await screen.findByText('LOW')).toBeInTheDocument()
+    expect(screen.getByText('Reorder when at or below 3')).toBeInTheDocument()
+  })
+
   it('shows boolean and text schema values on the detail page', async () => {
     vi.spyOn(apiService, 'getAssetById').mockResolvedValue(ingredient)
     mockObjectTypes()
@@ -198,7 +283,7 @@ describe('AssetDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/^quantity/i)).toHaveValue(12)
     })
-    expect(screen.getByLabelText(/minimum quantity/i)).toHaveValue(2)
+    expect(screen.getByLabelText(/reorder threshold/i)).toHaveValue(2)
     expect(screen.getByLabelText(/location/i)).toHaveValue('Kitchen')
   })
 

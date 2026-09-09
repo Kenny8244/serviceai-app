@@ -53,7 +53,7 @@ export const DEFAULT_OBJECT_TYPE_ATTRIBUTES: Record<string, readonly DefaultAttr
   Product: [
     { name: 'sku', label: 'SKU', dataType: 'string', required: false, order: 1 },
     { name: 'quantity', label: 'Quantity', dataType: 'number', required: true, order: 2 },
-    { name: 'min_quantity', label: 'Minimum quantity', dataType: 'number', required: false, order: 3 },
+    { name: 'min_quantity', label: 'Reorder threshold', dataType: 'number', required: false, order: 3 },
     { name: 'unit_cost', label: 'Unit cost', dataType: 'number', required: false, order: 4 },
     { name: 'supplier', label: 'Supplier', dataType: 'string', required: false, order: 5 },
     { name: 'location', label: 'Location', dataType: 'string', required: false, order: 6 },
@@ -61,7 +61,7 @@ export const DEFAULT_OBJECT_TYPE_ATTRIBUTES: Record<string, readonly DefaultAttr
   Ingredient: [
     { name: 'quantity', label: 'Quantity', dataType: 'number', required: true, order: 1 },
     { name: 'unit', label: 'Unit', dataType: 'string', required: true, order: 2 },
-    { name: 'min_quantity', label: 'Minimum quantity', dataType: 'number', required: false, order: 3 },
+    { name: 'min_quantity', label: 'Reorder threshold', dataType: 'number', required: false, order: 3 },
     { name: 'location', label: 'Location', dataType: 'string', required: false, order: 4 },
     { name: 'perishable', label: 'Perishable', dataType: 'boolean', required: false, order: 5 },
   ],
@@ -315,17 +315,37 @@ export async function seedDefaultObjectTypeAttributes(admin: SupabaseClient, sch
       }))
   })
 
-  if (missing.length === 0) return
-
-  const inserted = await admin.from('object_type_attributes').insert(missing)
-  if (inserted.error) {
-    if (inserted.error.code === '23505') return
-    if (isMissingAttributesTable(inserted.error)) {
-      console.error('Object type attributes table is missing. Apply the SCRUM-34 migration.')
-      return
+  if (missing.length > 0) {
+    const inserted = await admin.from('object_type_attributes').insert(missing)
+    if (inserted.error) {
+      if (inserted.error.code === '23505') {
+        await refreshDefaultAttributeLabels(admin, typeIds)
+        return
+      }
+      if (isMissingAttributesTable(inserted.error)) {
+        console.error('Object type attributes table is missing. Apply the SCRUM-34 migration.')
+        return
+      }
+      console.error('Failed to seed object type attributes:', inserted.error.message)
+      throw new ObjectTypesHttpError('Could not create object types.', 500)
     }
-    console.error('Failed to seed object type attributes:', inserted.error.message)
-    throw new ObjectTypesHttpError('Could not create object types.', 500)
+  }
+
+  await refreshDefaultAttributeLabels(admin, typeIds)
+}
+
+async function refreshDefaultAttributeLabels(admin: SupabaseClient, typeIds: string[]): Promise<void> {
+  if (typeIds.length === 0) return
+
+  const { error } = await admin
+    .from('object_type_attributes')
+    .update({ label: 'Reorder threshold' })
+    .eq('name', 'min_quantity')
+    .eq('label', 'Minimum quantity')
+    .in('object_type_id', typeIds)
+
+  if (error && !isMissingAttributesTable(error)) {
+    console.error('Failed to update reorder threshold labels:', error.message)
   }
 }
 
@@ -394,11 +414,17 @@ export function defaultObjectTypeId(types: ObjectTypeRecord[]): string | null {
   return product?.id ?? active[0]?.id ?? null
 }
 
+function hasStaleReorderThresholdLabel(types: ObjectTypeRecord[]): boolean {
+  return types.some((type) =>
+    type.attributes.some((attribute) => attribute.name === 'min_quantity' && attribute.label === 'Minimum quantity')
+  )
+}
+
 export async function listWorkspaceObjectTypes(env: Env, userId: string): Promise<ObjectTypeRecord[]> {
   const context = await loadWorkspaceContext(env, userId)
   if (!context) return []
   const existing = await loadTypesForWorkspace(context.admin, context.workspaceId)
-  if (existing.length > 0) return existing
+  if (existing.length > 0 && !hasStaleReorderThresholdLabel(existing)) return existing
   await ensureWorkspaceObjectTypes(context.admin, context.workspaceId)
   return loadTypesForWorkspace(context.admin, context.workspaceId)
 }

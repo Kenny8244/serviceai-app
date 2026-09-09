@@ -3,6 +3,7 @@ import {
   assetHasQuantityField,
   defaultAttributeFormValue,
   defaultObjectTypeIdForVertical,
+  getStockStatus,
   objectTypeExampleKind,
   requiredAttributeError,
   serializeAttributeValues,
@@ -111,5 +112,13 @@ describe('objectTypeSchema', () => {
         },
       ])
     ).toBe(false)
+  })
+
+  it('flags low stock at or below the reorder threshold and out of stock at zero', () => {
+    expect(getStockStatus({ quantity: 5, minQuantity: 2 })).toBe('ACTIVE')
+    expect(getStockStatus({ quantity: 2, minQuantity: 2 })).toBe('LOW')
+    expect(getStockStatus({ quantity: 1, minQuantity: 2 })).toBe('LOW')
+    expect(getStockStatus({ quantity: 0, minQuantity: 2 })).toBe('OUT')
+    expect(getStockStatus({ quantity: 0, minQuantity: 0 })).toBe('OUT')
   })
 })

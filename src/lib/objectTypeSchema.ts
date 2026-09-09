@@ -125,6 +125,14 @@ export function assetHasQuantityField(asset: Asset, types: ObjectType[]): boolea
   return Object.prototype.hasOwnProperty.call(asset.customFields ?? {}, 'quantity')
 }
 
+export type StockStatus = 'ACTIVE' | 'LOW' | 'OUT'
+
+export function getStockStatus(asset: Pick<Asset, 'quantity' | 'minQuantity'>): StockStatus {
+  if (asset.quantity <= 0) return 'OUT'
+  if (asset.quantity <= asset.minQuantity) return 'LOW'
+  return 'ACTIVE'
+}
+
 export function searchableAssetValues(asset: Asset): Array<string | number | boolean | null | undefined> {
   const values: Array<string | number | boolean | null | undefined> = [
     asset.name,

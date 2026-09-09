@@ -17,15 +17,9 @@ import {
   attributeValueFromAsset,
   assetHasQuantityField,
   formatAttributeValue,
+  getStockStatus,
+  type StockStatus,
 } from '@/lib/objectTypeSchema'
-
-type StockStatus = 'ACTIVE' | 'LOW' | 'OUT'
-
-function getStockStatus(asset: Asset): StockStatus {
-  if (asset.quantity <= 0) return 'OUT'
-  if (asset.quantity <= asset.minQuantity) return 'LOW'
-  return 'ACTIVE'
-}
 
 function formatDate(value: string): string {
   if (!value) return '—'
@@ -37,8 +31,8 @@ function getStatusBadgeVariant(status: StockStatus) {
   switch (status) {
     case 'ACTIVE':
       return 'default' as const
-    case 'LOW':
-      return 'secondary' as const
+      case 'LOW':
+        return 'warning' as const
     case 'OUT':
       return 'destructive' as const
   }
@@ -108,6 +102,7 @@ function AssetDetailPage() {
   const selectedType = objectTypes.find((type) => type.id === asset?.objectTypeId)
   const selectedSchema = selectedType?.attributes ?? []
   const hasQuantityField = asset ? assetHasQuantityField(asset, objectTypes) : false
+  const stockStatus = asset && hasQuantityField ? getStockStatus(asset) : null
 
   return (
     <PageShell
@@ -141,10 +136,8 @@ function AssetDetailPage() {
                 <div>
                   <h2 className="text-2xl font-bold">{asset.name}</h2>
                   <div className="flex items-center mt-2">
-                    {hasQuantityField ? (
-                      <Badge variant={getStatusBadgeVariant(getStockStatus(asset))}>
-                        {getStockStatus(asset)}
-                      </Badge>
+                    {stockStatus ? (
+                      <Badge variant={getStatusBadgeVariant(stockStatus)}>{stockStatus}</Badge>
                     ) : null}
                   </div>
                 </div>
