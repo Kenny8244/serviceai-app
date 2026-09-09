@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Package, Plus, Search } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { ArrowDownNarrowWide, ArrowUpNarrowWide, ChevronDown, Package, Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -15,7 +15,24 @@ import { getVerticalContent } from '@/lib/verticalContent'
 import { toUserMessage } from '@/lib/userFacingError'
 import { apiService, type Asset, type ObjectType } from '@/services/api'
 import { cn } from '@/lib/utils'
-import { assetHasQuantityField, getStockStatus, searchableAssetValues, type StockStatus } from '@/lib/objectTypeSchema'
+import { assetHasQuantityField, getStockStatus, type StockStatus } from '@/lib/objectTypeSchema'
+import {
+  ASSET_LIST_SORT_FIELDS,
+  ASSET_LIST_STATUSES,
+  assetListHasFilters,
+  assetListSortDirection,
+  assetListSortField,
+  defaultDirectionForSortField,
+  filterAndSortAssets,
+  parseAssetListParams,
+  stockStatusForList,
+  toAssetListSearchParams,
+  toAssetListSort,
+  toggleAssetListSortDirection,
+  type AssetListQuery,
+  type AssetListSortField,
+  type AssetListStatusFilter,
+} from '@/lib/assetListQuery'
 
 function formatDate(value: string): string {
   if (!value) return '—'
@@ -23,17 +40,44 @@ function formatDate(value: string): string {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString()
 }
 
+const SORT_FIELD_LABELS: Record<AssetListSortField, string> = {
+  updated: 'Updated',
+  name: 'Name',
+}
+
+const STATUS_LABELS: Record<AssetListStatusFilter, string> = {
+  all: 'All',
+  ACTIVE: 'Active',
+  LOW: 'Low stock',
+  OUT: 'Out of stock',
+  none: 'No status',
+}
+
 function AssetsPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const vertical = getVerticalContent(getSelectedVertical())
   const [assets, setAssets] = useState<Asset[]>([])
-  const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [formTarget, setFormTarget] = useState<'new' | null>(null)
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([])
   const importSnap = useSyncExternalStore(subscribeAssetImport, getAssetImportSnapshot)
+  const listQuery = useMemo(() => parseAssetListParams(searchParams), [searchParams])
+
+  const updateListQuery = useCallback(
+    (patch: Partial<AssetListQuery>) => {
+      setSearchParams(
+        (previous) => toAssetListSearchParams({ ...parseAssetListParams(previous), ...patch }),
+        { replace: true }
+      )
+    },
+    [setSearchParams]
+  )
+
+  const clearListQuery = useCallback(() => {
+    setSearchParams(new URLSearchParams(), { replace: true })
+  }, [setSearchParams])
 
   useEffect(() => {
     let cancelled = false
@@ -108,15 +152,20 @@ function AssetsPage() {
       .map(([id, { name, count }]) => ({ id, name, count }))
   }, [assets])
 
-  const filteredAssets = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase()
-    return assets.filter((asset) => {
-      const typeId = asset.objectTypeId || 'unknown'
-      if (selectedTypeId && typeId !== selectedTypeId) return false
-      if (!query) return true
-      return searchableAssetValues(asset).some((value) => String(value ?? '').toLowerCase().includes(query))
-    })
-  }, [assets, searchQuery, selectedTypeId])
+  const statusCounts = useMemo(() => {
+    const counts: Record<AssetListStatusFilter, number> = { all: assets.length, ACTIVE: 0, LOW: 0, OUT: 0, none: 0 }
+    for (const asset of assets) {
+      const status = stockStatusForList(asset, objectTypes)
+      if (status) counts[status] += 1
+      else counts.none += 1
+    }
+    return counts
+  }, [assets, objectTypes])
+
+  const filteredAssets = useMemo(
+    () => filterAndSortAssets(assets, listQuery, objectTypes),
+    [assets, listQuery, objectTypes]
+  )
 
   const getStatusBadgeVariant = (status: StockStatus) => {
     switch (status) {
@@ -129,6 +178,11 @@ function AssetsPage() {
     }
   }
 
+  const sidebarButtonClass = (active: boolean) =>
+    `flex w-full items-center py-1 px-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700 ${
+      active ? 'bg-slate-100 dark:bg-slate-700 font-medium' : ''
+    }`
+
   return (
     <PageShell
       flush
@@ -139,11 +193,63 @@ function AssetsPage() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
             <Input
               type="search"
-              placeholder={`Search ${vertical.navAssetsLabel.toLowerCase()}...`}
-              className="pl-8 w-[300px]"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search by name or SKU..."
+              className="pl-8 w-[240px]"
+              value={listQuery.q}
+              onChange={(event) => updateListQuery({ q: event.target.value })}
             />
+          </div>
+          <div
+            className={cn(
+              'inline-flex h-10 items-stretch overflow-hidden rounded-md border border-input bg-background',
+              'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2'
+            )}
+          >
+            <div className="relative">
+              <select
+                aria-label="Sort assets"
+                className="h-full w-[6.75rem] cursor-pointer appearance-none bg-transparent pl-3 pr-8 text-sm text-foreground outline-none [&::-ms-expand]:hidden"
+                value={assetListSortField(listQuery.sort)}
+                onChange={(event) => {
+                  const field = event.target.value as AssetListSortField
+                  updateListQuery({ sort: toAssetListSort(field, defaultDirectionForSortField(field)) })
+                }}
+              >
+                {ASSET_LIST_SORT_FIELDS.map((field) => (
+                  <option key={field} value={field}>
+                    {SORT_FIELD_LABELS[field]}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                aria-hidden
+                className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
+              />
+            </div>
+            <span className="my-1.5 w-px shrink-0 bg-slate-200 dark:bg-slate-700" aria-hidden />
+            <button
+              type="button"
+              className="grid w-9 shrink-0 place-items-center text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+              aria-label={
+                assetListSortDirection(listQuery.sort) === 'asc' ? 'Sort ascending' : 'Sort descending'
+              }
+              title={
+                assetListSortField(listQuery.sort) === 'name'
+                  ? assetListSortDirection(listQuery.sort) === 'asc'
+                    ? 'A to Z'
+                    : 'Z to A'
+                  : assetListSortDirection(listQuery.sort) === 'asc'
+                    ? 'Oldest first'
+                    : 'Newest first'
+              }
+              onClick={() => updateListQuery({ sort: toggleAssetListSortDirection(listQuery.sort) })}
+            >
+              {assetListSortDirection(listQuery.sort) === 'asc' ? (
+                <ArrowUpNarrowWide className="h-3.5 w-3.5" />
+              ) : (
+                <ArrowDownNarrowWide className="h-3.5 w-3.5" />
+              )}
+            </button>
           </div>
           <Button type="button" onClick={() => setFormTarget('new')}>
             <Plus className="mr-2 h-4 w-4" />
@@ -157,10 +263,8 @@ function AssetsPage() {
           <h2 className="font-semibold text-lg mb-4">Object types</h2>
           <button
             type="button"
-            onClick={() => setSelectedTypeId(null)}
-            className={`flex w-full items-center py-1 px-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700 ${
-              selectedTypeId === null ? 'bg-slate-100 dark:bg-slate-700 font-medium' : ''
-            }`}
+            onClick={() => updateListQuery({ typeId: null })}
+            className={sidebarButtonClass(listQuery.typeId === null)}
           >
             <span className="flex-1 text-left">All</span>
             <span className="text-xs text-slate-500 dark:text-slate-400">{assets.length}</span>
@@ -169,13 +273,25 @@ function AssetsPage() {
             <button
               key={type.id}
               type="button"
-              onClick={() => setSelectedTypeId(type.id)}
-              className={`flex w-full items-center py-1 px-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700 ${
-                selectedTypeId === type.id ? 'bg-slate-100 dark:bg-slate-700 font-medium' : ''
-              }`}
+              onClick={() => updateListQuery({ typeId: type.id })}
+              className={sidebarButtonClass(listQuery.typeId === type.id)}
             >
               <span className="flex-1 text-left">{type.name}</span>
               <span className="text-xs text-slate-500 dark:text-slate-400">{type.count}</span>
+            </button>
+          ))}
+
+          <h2 className="font-semibold text-lg mt-6 mb-4">Status</h2>
+          {ASSET_LIST_STATUSES.map((status) => (
+            <button
+              key={status}
+              type="button"
+              aria-label={`Filter by status: ${STATUS_LABELS[status]}`}
+              onClick={() => updateListQuery({ status })}
+              className={sidebarButtonClass(listQuery.status === status)}
+            >
+              <span className="flex-1 text-left">{STATUS_LABELS[status]}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{statusCounts[status]}</span>
             </button>
           ))}
         </div>
@@ -214,8 +330,15 @@ function AssetsPage() {
             ) : filteredAssets.length === 0 ? (
               <EmptyState
                 title="No assets match this search"
-                description="Try a different name, SKU, or object type."
+                description="Try a different name, SKU, object type, or status."
                 className="py-10"
+                action={
+                  assetListHasFilters(listQuery) ? (
+                    <Button type="button" variant="outline" onClick={clearListQuery}>
+                      Clear filters
+                    </Button>
+                  ) : null
+                }
               />
             ) : (
               filteredAssets.map((asset) => {

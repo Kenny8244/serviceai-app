@@ -113,14 +113,22 @@ const ingredient: Asset = {
 
 function LocationProbe() {
   const location = useLocation()
-  return <div data-testid="location">{location.pathname}</div>
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>
 }
 
 function renderAssetsPage(initialPath = '/assets') {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
-        <Route path="/assets" element={<AssetsPage />} />
+        <Route
+          path="/assets"
+          element={
+            <>
+              <LocationProbe />
+              <AssetsPage />
+            </>
+          }
+        />
         <Route path="/assets/:id" element={<LocationProbe />} />
       </Routes>
     </MemoryRouter>
@@ -383,5 +391,143 @@ describe('AssetsPage', () => {
 
     expect(await screen.findByText("Couldn't load assets")).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
+  })
+
+  it('searches by name or SKU and ignores other fields', async () => {
+    vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample, ingredient])
+    mockObjectTypes()
+    renderAssetsPage()
+
+    await screen.findByText('Walk-in cooler')
+    const search = screen.getByPlaceholderText(/search by name or sku/i)
+    fireEvent.change(search, { target: { value: 'Kitchen' } })
+    expect(await screen.findByText('No assets match this search')).toBeInTheDocument()
+
+    fireEvent.change(search, { target: { value: 'SKU-9' } })
+    expect(await screen.findByText('Walk-in cooler')).toBeInTheDocument()
+    expect(screen.queryByText('Flour 00')).not.toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('q=SKU-9')
+  })
+
+  it('filters by stock status and hides types without quantity', async () => {
+    const low: Asset = {
+      ...sample,
+      id: 'obj-low',
+      name: 'Low stock milk',
+      sku: 'MILK-1',
+      quantity: 1,
+      minQuantity: 2,
+      customFields: { ...sample.customFields, sku: 'MILK-1', quantity: 1, min_quantity: 2 },
+    }
+    const freezer: Asset = {
+      ...sample,
+      id: 'obj-fz',
+      name: 'Walk-in freezer',
+      objectTypeId: 'type-freezer',
+      objectTypeName: 'Freezer',
+      sku: null,
+      quantity: 0,
+      minQuantity: 0,
+      customFields: { location: 'Dock' },
+    }
+    vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample, low, freezer])
+    mockObjectTypes()
+    renderAssetsPage()
+
+    await screen.findByText('Walk-in cooler')
+    fireEvent.click(screen.getByRole('button', { name: /filter by status: Low stock/i }))
+
+    expect(screen.getByText('Low stock milk')).toBeInTheDocument()
+    expect(screen.queryByText('Walk-in cooler')).not.toBeInTheDocument()
+    expect(screen.queryByText('Walk-in freezer')).not.toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('status=LOW')
+
+    fireEvent.click(screen.getByRole('button', { name: /filter by status: No status/i }))
+    expect(screen.getByText('Walk-in freezer')).toBeInTheDocument()
+    expect(screen.queryByText('Low stock milk')).not.toBeInTheDocument()
+    expect(screen.queryByText('Walk-in cooler')).not.toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('status=none')
+  })
+
+  it('sorts by name and updated date', async () => {
+    const older: Asset = {
+      ...ingredient,
+      name: 'Apple crate',
+      updatedAt: '2026-09-01T00:00:00.000Z',
+    }
+    vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample, older])
+    mockObjectTypes()
+    renderAssetsPage()
+
+    await screen.findByText('Walk-in cooler')
+    const rowNames = () =>
+      screen
+        .getAllByRole('button')
+        .map((button) => button.textContent ?? '')
+        .filter((text) => text.includes('Updated'))
+    expect(rowNames()[0]).toContain('Walk-in cooler')
+    expect(rowNames()[1]).toContain('Apple crate')
+
+    fireEvent.change(screen.getByLabelText(/sort assets/i), { target: { value: 'name' } })
+    expect(rowNames()[0]).toContain('Apple crate')
+    expect(rowNames()[1]).toContain('Walk-in cooler')
+    expect(screen.getByTestId('location')).toHaveTextContent('sort=name-asc')
+    expect(screen.getByLabelText(/sort assets/i)).toHaveValue('name')
+
+    fireEvent.click(screen.getByRole('button', { name: /sort ascending/i }))
+    expect(rowNames()[0]).toContain('Walk-in cooler')
+    expect(rowNames()[1]).toContain('Apple crate')
+    expect(screen.getByTestId('location')).toHaveTextContent('sort=name-desc')
+  })
+
+  it('hydrates search, filters, and sort from the URL', async () => {
+    const low: Asset = {
+      ...sample,
+      id: 'obj-low',
+      name: 'Low stock milk',
+      sku: 'MILK-1',
+      quantity: 1,
+      minQuantity: 2,
+      updatedAt: '2026-09-08T00:00:00.000Z',
+      customFields: { ...sample.customFields, sku: 'MILK-1', quantity: 1, min_quantity: 2 },
+    }
+    vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample, ingredient, low])
+    mockObjectTypes()
+    renderAssetsPage('/assets?q=milk&type=type-product&status=LOW&sort=name-asc')
+
+    expect(await screen.findByText('Low stock milk')).toBeInTheDocument()
+    expect(screen.queryByText('Walk-in cooler')).not.toBeInTheDocument()
+    expect(screen.queryByText('Flour 00')).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/search by name or sku/i)).toHaveValue('milk')
+    expect(screen.getByLabelText(/sort assets/i)).toHaveValue('name')
+    expect(screen.getByRole('button', { name: /sort ascending/i })).toBeInTheDocument()
+  })
+
+  it('clears search and filters from the empty state', async () => {
+    vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample, ingredient])
+    mockObjectTypes()
+    renderAssetsPage()
+
+    await screen.findByText('Walk-in cooler')
+    fireEvent.change(screen.getByPlaceholderText(/search by name or sku/i), { target: { value: 'zzzz' } })
+    expect(await screen.findByText('No assets match this search')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /clear filters/i }))
+    expect(await screen.findByText('Walk-in cooler')).toBeInTheDocument()
+    expect(screen.getByText('Flour 00')).toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('/assets')
+    expect(screen.getByTestId('location')).not.toHaveTextContent('q=')
+  })
+
+  it('writes the object type filter to the URL', async () => {
+    vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample, ingredient])
+    mockObjectTypes()
+    renderAssetsPage()
+
+    await screen.findByText('Walk-in cooler')
+    const sidebar = screen.getByRole('heading', { name: 'Object types' }).closest('div')
+    fireEvent.click(within(sidebar!).getByRole('button', { name: /ingredient/i }))
+
+    expect(screen.getByTestId('location')).toHaveTextContent('type=type-ingredient')
   })
 })

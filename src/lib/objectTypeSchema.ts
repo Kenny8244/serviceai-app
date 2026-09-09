@@ -132,20 +132,3 @@ export function getStockStatus(asset: Pick<Asset, 'quantity' | 'minQuantity'>): 
   if (asset.quantity <= asset.minQuantity) return 'LOW'
   return 'ACTIVE'
 }
-
-export function searchableAssetValues(asset: Asset): Array<string | number | boolean | null | undefined> {
-  const values: Array<string | number | boolean | null | undefined> = [
-    asset.name,
-    asset.sku,
-    asset.category,
-    asset.supplier,
-    asset.location,
-    asset.objectTypeName,
-  ]
-  for (const value of Object.values(asset.customFields ?? {})) {
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      values.push(value)
-    }
-  }
-  return values
-}
