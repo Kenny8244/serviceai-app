@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AssetsPage from '@/pages/AssetsPage'
 import { apiService, type Asset, type ObjectType } from '@/services/api'
@@ -109,27 +110,20 @@ const ingredient: Asset = {
   updatedAt: '2026-09-04T00:00:00.000Z',
 }
 
-const noteAsset: Asset = {
-  id: 'obj-note',
-  name: 'Storage note',
-  description: null,
-  category: 'Note',
-  objectTypeId: 'type-note',
-  objectTypeName: 'Note',
-  sku: null,
-  quantity: 0,
-  minQuantity: 0,
-  unitCost: null,
-  supplier: null,
-  location: null,
-  tags: null,
-  avatar: null,
-  customFields: {
-    notes: 'Keep dry',
-  },
-  isActive: true,
-  createdAt: '2026-09-01T00:00:00.000Z',
-  updatedAt: '2026-09-04T00:00:00.000Z',
+function LocationProbe() {
+  const location = useLocation()
+  return <div data-testid="location">{location.pathname}</div>
+}
+
+function renderAssetsPage(initialPath = '/assets') {
+  return render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <Routes>
+        <Route path="/assets" element={<AssetsPage />} />
+        <Route path="/assets/:id" element={<LocationProbe />} />
+      </Routes>
+    </MemoryRouter>
+  )
 }
 
 function mockObjectTypes() {
@@ -144,7 +138,7 @@ afterEach(() => {
 describe('AssetsPage', () => {
   it('shows Add Asset on an empty live list', async () => {
     vi.spyOn(apiService, 'getAssets').mockResolvedValue([])
-    render(<AssetsPage />)
+    renderAssetsPage()
 
     expect(await screen.findByText('No assets yet')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Add Asset' }).length).toBeGreaterThanOrEqual(2)
@@ -153,9 +147,9 @@ describe('AssetsPage', () => {
   it('opens the add asset form from the header button', async () => {
     vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample])
     mockObjectTypes()
-    render(<AssetsPage />)
+    renderAssetsPage()
 
-    await screen.findAllByText('Walk-in cooler')
+    await screen.findByText('Walk-in cooler')
     fireEvent.click(screen.getAllByRole('button', { name: 'Add Asset' })[0])
 
     expect(await screen.findByRole('dialog', { name: 'Add Asset' })).toBeInTheDocument()
@@ -191,57 +185,71 @@ describe('AssetsPage', () => {
     expect(screen.getByRole('dialog', { name: 'Add Asset' })).toBeInTheDocument()
   })
 
-  it('opens the edit form with the selected asset values', async () => {
+  it('navigates to the asset detail route when a row is opened', async () => {
     vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample])
     mockObjectTypes()
-    render(<AssetsPage />)
+    renderAssetsPage()
 
-    await screen.findAllByText('Walk-in cooler')
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
-
-    expect(await screen.findByRole('dialog', { name: 'Edit Asset' })).toBeInTheDocument()
-    expect(screen.getByLabelText(/name/i)).toHaveValue('Walk-in cooler')
-    expect(screen.getByLabelText(/object type/i)).toHaveValue('type-product')
-    await waitFor(() => {
-      expect(screen.getByLabelText(/^quantity/i)).toHaveValue(12)
-    })
-    expect(screen.getByLabelText(/minimum quantity/i)).toHaveValue(2)
-    expect(screen.getByLabelText(/location/i)).toHaveValue('Kitchen')
+    fireEvent.click(await screen.findByText('Walk-in cooler'))
+    expect(await screen.findByTestId('location')).toHaveTextContent('/assets/obj-1')
   })
 
-  it('reloads boolean and text schema values in the edit form and details', async () => {
-    vi.spyOn(apiService, 'getAssets').mockResolvedValue([ingredient, noteAsset])
+  it('saves a new asset through the API and opens its detail page', async () => {
+    let assets: Asset[] = [sample]
+    vi.spyOn(apiService, 'getAssets').mockImplementation(async () => assets)
     mockObjectTypes()
-    render(<AssetsPage />)
-
-    await screen.findAllByText('Flour 00')
-    expect(screen.getByText('kg')).toBeInTheDocument()
-    expect(screen.getByText('Yes')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    expect(await screen.findByRole('dialog', { name: 'Edit Asset' })).toBeInTheDocument()
-    await waitFor(() => {
-      expect(screen.getByLabelText(/^unit/i)).toHaveValue('kg')
+    const created: Asset = {
+      ...sample,
+      id: 'obj-new',
+      name: 'New cooler',
+      sku: 'SKU-22',
+      quantity: 8,
+      customFields: {
+        ...sample.customFields,
+        sku: 'SKU-22',
+        quantity: 8,
+      },
+    }
+    const createAsset = vi.spyOn(apiService, 'createAsset').mockImplementation(async () => {
+      assets = [created, ...assets.filter((asset) => asset.id !== created.id)]
+      return created
     })
-    expect(screen.getByLabelText(/^perishable$/i)).toBeChecked()
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    renderAssetsPage()
 
-    fireEvent.click(screen.getByText('Storage note'))
-    expect(await screen.findByText('Keep dry')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    expect(await screen.findByRole('dialog', { name: 'Edit Asset' })).toBeInTheDocument()
-    const notesField = await screen.findByLabelText(/^notes$/i)
-    expect(notesField.tagName).toBe('TEXTAREA')
-    expect(notesField).toHaveValue('Keep dry')
+    await screen.findByText('Walk-in cooler')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add Asset' })[0])
+    const dialog = await screen.findByRole('dialog', { name: 'Add Asset' })
+    fireEvent.change(await screen.findByLabelText(/^name/i), { target: { value: 'New cooler' } })
+    fireEvent.change(await screen.findByLabelText(/^sku$/i), { target: { value: 'SKU-22' } })
+    fireEvent.change(screen.getByLabelText(/^quantity/i), { target: { value: '8' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Add Asset' })).not.toBeInTheDocument()
+    })
+    expect(createAsset).toHaveBeenCalledTimes(1)
+    expect(createAsset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'New cooler',
+        objectTypeId: 'type-product',
+        sku: 'SKU-22',
+        quantity: 8,
+        customFields: expect.objectContaining({
+          sku: 'SKU-22',
+          quantity: 8,
+        }),
+      })
+    )
+    expect(await screen.findByTestId('location')).toHaveTextContent('/assets/obj-new')
   })
 
   it('does not save when a required schema field is empty', async () => {
     vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample])
     mockObjectTypes()
     const createAsset = vi.spyOn(apiService, 'createAsset').mockResolvedValue(sample)
-    render(<AssetsPage />)
+    renderAssetsPage()
 
-    await screen.findAllByText('Walk-in cooler')
+    await screen.findByText('Walk-in cooler')
     fireEvent.click(screen.getAllByRole('button', { name: 'Add Asset' })[0])
     const dialog = await screen.findByRole('dialog', { name: 'Add Asset' })
     fireEvent.change(await screen.findByLabelText(/object type/i), { target: { value: 'type-freezer' } })
@@ -267,25 +275,11 @@ describe('AssetsPage', () => {
     }
     vi.spyOn(apiService, 'getAssets').mockResolvedValue([freezer])
     mockObjectTypes()
-    render(<AssetsPage />)
+    renderAssetsPage()
 
-    expect((await screen.findAllByText('Walk-in freezer')).length).toBeGreaterThan(0)
+    expect(await screen.findByText('Walk-in freezer')).toBeInTheDocument()
     expect(screen.queryByText(/Qty/)).not.toBeInTheDocument()
     expect(screen.queryByText('OUT')).not.toBeInTheDocument()
-  })
-
-  it('does not copy previous type values when the object type changes', async () => {
-    vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample])
-    mockObjectTypes()
-    render(<AssetsPage />)
-
-    await screen.findAllByText('Walk-in cooler')
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    await screen.findByRole('dialog', { name: 'Edit Asset' })
-    fireEvent.change(await screen.findByLabelText(/object type/i), { target: { value: 'type-freezer' } })
-
-    expect(await screen.findByLabelText(/^location/i)).toHaveValue('')
-    expect(screen.getByLabelText(/^temperature/i)).toHaveValue(null)
   })
 
   it('shows an error when object types fail to load', async () => {
@@ -293,54 +287,47 @@ describe('AssetsPage', () => {
     vi.spyOn(apiService, 'getObjectTypes').mockRejectedValue(
       Object.assign(new Error('Could not load object types.'), { status: 500 })
     )
-    render(<AssetsPage />)
+    renderAssetsPage()
 
-    await screen.findAllByText('Walk-in cooler')
+    await screen.findByText('Walk-in cooler')
     fireEvent.click(screen.getAllByRole('button', { name: 'Add Asset' })[0])
 
     expect(await screen.findByText('The server had a problem. Please try again in a moment.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
   })
 
+  it('filters the list by object type, not category', async () => {
+    vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample, ingredient])
+    mockObjectTypes()
+    renderAssetsPage()
+
+    await screen.findByText('Walk-in cooler')
+    expect(screen.getByRole('heading', { name: 'Object types' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Categories' })).not.toBeInTheDocument()
+
+    const sidebar = screen.getByRole('heading', { name: 'Object types' }).closest('div')
+    fireEvent.click(within(sidebar!).getByRole('button', { name: /ingredient/i }))
+
+    expect(screen.getByText('Flour 00')).toBeInTheDocument()
+    expect(screen.queryByText('Walk-in cooler')).not.toBeInTheDocument()
+  })
+
   it('renders type, quantity, and updated date on a live row', async () => {
     vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample])
-    render(<AssetsPage />)
+    mockObjectTypes()
+    renderAssetsPage()
 
-    expect((await screen.findAllByText('Walk-in cooler')).length).toBeGreaterThan(0)
+    expect(await screen.findByText('Walk-in cooler')).toBeInTheDocument()
     expect(screen.getAllByText(/Product/).length).toBeGreaterThan(0)
     expect(screen.getByText(/Qty 12/)).toBeInTheDocument()
     expect(screen.getAllByText(/Updated/).length).toBeGreaterThan(0)
-  })
-
-  it('asks for confirmation before deleting the selected asset', async () => {
-    vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample])
-    const deleteAsset = vi.spyOn(apiService, 'deleteAsset').mockResolvedValue({ success: true })
-    render(<AssetsPage />)
-
-    await screen.findAllByText('Walk-in cooler')
-    fireEvent.click(screen.getByRole('button', { name: /delete asset/i }))
-
-    const dialog = await screen.findByRole('dialog', { name: 'Delete asset?' })
-    expect(dialog).toHaveTextContent('Walk-in cooler')
-
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('dialog', { name: 'Delete asset?' })).not.toBeInTheDocument()
-    expect(deleteAsset).not.toHaveBeenCalled()
-    expect(screen.getAllByText('Walk-in cooler').length).toBeGreaterThan(0)
-
-    fireEvent.click(screen.getByRole('button', { name: /delete asset/i }))
-    const confirmDialog = await screen.findByRole('dialog', { name: 'Delete asset?' })
-    fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Delete' }))
-
-    await screen.findByText('No assets yet')
-    expect(deleteAsset).toHaveBeenCalledWith('obj-1')
   })
 
   it('shows an error state when the list API fails', async () => {
     vi.spyOn(apiService, 'getAssets').mockRejectedValue(
       Object.assign(new Error('Could not load assets.'), { status: 500 })
     )
-    render(<AssetsPage />)
+    renderAssetsPage()
 
     expect(await screen.findByText("Couldn't load assets")).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 test('sidebar Import Data uploads CSV into the asset list', async ({ page, request }) => {
+  test.setTimeout(60_000)
   const demo = await request.post('http://127.0.0.1:8787/api/auth/demo')
   expect(demo.ok()).toBeTruthy()
   const { token } = (await demo.json()) as { token: string }
@@ -34,7 +35,10 @@ test('sidebar Import Data uploads CSV into the asset list', async ({ page, reque
   await expect(page.getByText('Acme')).toBeVisible()
   await page.getByRole('button', { name: /Import 1 item/ }).click()
   await expect(page).toHaveURL(/\/assets$/)
-  await expect(page.getByRole('status').filter({ hasText: /Import/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Import Data' })).toHaveCount(0)
+  await expect(page.getByRole('status').filter({ hasText: /Imported 1 item/ })).toBeVisible({
+    timeout: 45_000,
+  })
   await expect(page.getByText(importedName).first()).toBeVisible()
 
   await page.reload()

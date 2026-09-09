@@ -2,6 +2,7 @@ import { isPublicAuthUrl, notifyAuthSessionChanged } from '@/lib/authSession';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
+
 export interface User {
   id: string;
   email: string;
@@ -154,6 +155,28 @@ export interface ObjectType {
   createdAt: string
   updatedAt: string
   attributes: ObjectTypeAttribute[]
+}
+
+const OBJECT_TYPES_CACHE_TTL_MS = 60_000
+let objectTypesCache: ObjectType[] | null = null
+let objectTypesCacheAt = 0
+let objectTypesInflight: Promise<ObjectType[]> | null = null
+
+export function clearObjectTypesCache(): void {
+  objectTypesCache = null
+  objectTypesCacheAt = 0
+  objectTypesInflight = null
+}
+
+export function peekObjectTypesCache(): ObjectType[] | null {
+  if (!objectTypesCache || objectTypesCache.length === 0) return null
+  if (Date.now() - objectTypesCacheAt > OBJECT_TYPES_CACHE_TTL_MS) return null
+  return objectTypesCache
+}
+
+function rememberObjectTypes(types: ObjectType[]): void {
+  objectTypesCache = types
+  objectTypesCacheAt = Date.now()
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -676,12 +699,13 @@ class ApiService {
     return asAssetList(data).map(normalizeAsset);
   }
 
-  async getAssetById(assetId: string) {
+  async getAssetById(assetId: string): Promise<Asset> {
     const response = await fetch(`${API_BASE_URL}/assets/${assetId}`, {
       method: 'GET',
       headers: this.getAuthHeaders(),
     });
-    return this.handleResponse(response);
+    const data = await this.handleResponse<unknown>(response);
+    return normalizeAsset(data);
   }
 
   async createAsset(assetData: {
@@ -742,12 +766,24 @@ class ApiService {
   }
 
   async getObjectTypes(): Promise<ObjectType[]> {
-    const response = await fetch(`${API_BASE_URL}/object-types`, {
-      method: 'GET',
-      headers: this.getAuthHeaders(),
+    const hit = peekObjectTypesCache()
+    if (hit) return hit
+    if (objectTypesInflight) return objectTypesInflight
+
+    objectTypesInflight = (async () => {
+      const response = await fetch(`${API_BASE_URL}/object-types`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      })
+      const data = await this.handleResponse<unknown>(response)
+      const types = asObjectTypeList(data).map(normalizeObjectType)
+      rememberObjectTypes(types)
+      return types
+    })().finally(() => {
+      objectTypesInflight = null
     })
-    const data = await this.handleResponse<unknown>(response)
-    return asObjectTypeList(data).map(normalizeObjectType)
+
+    return objectTypesInflight
   }
 
   async getAssetTransactions(assetId: string, page: number = 1, limit: number = 50) {
@@ -903,6 +939,7 @@ class ApiService {
     localStorage.removeItem('authUserId');
     sessionStorage.removeItem('authToken');
     sessionStorage.removeItem('authUserId');
+    clearObjectTypesCache();
     if (hadToken && options?.notify !== false) {
       notifyAuthSessionChanged();
     }

@@ -397,6 +397,8 @@ export function defaultObjectTypeId(types: ObjectTypeRecord[]): string | null {
 export async function listWorkspaceObjectTypes(env: Env, userId: string): Promise<ObjectTypeRecord[]> {
   const context = await loadWorkspaceContext(env, userId)
   if (!context) return []
+  const existing = await loadTypesForWorkspace(context.admin, context.workspaceId)
+  if (existing.length > 0) return existing
   await ensureWorkspaceObjectTypes(context.admin, context.workspaceId)
   return loadTypesForWorkspace(context.admin, context.workspaceId)
 }

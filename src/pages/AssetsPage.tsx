@@ -1,36 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react'
-import { Package, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Package, Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { FormField, nativeSelectClassName } from '@/components/ui/form-field'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState, SkeletonBlock } from '@/components/ui/loading-state'
 import { PageShell } from '@/components/layout/PageShell'
+import { AssetAvatar, AssetFormDialog } from '@/components/assets/AssetDialogs'
 import { getAssetImportSnapshot, subscribeAssetImport } from '@/lib/assetImportJob'
 import { getSelectedVertical } from '@/lib/verticalStorage'
 import { getVerticalContent } from '@/lib/verticalContent'
 import { toUserMessage } from '@/lib/userFacingError'
-import { apiService, type Asset, type ObjectType, type ObjectTypeAttribute } from '@/services/api'
-import {
-  defaultAttributeFormValue,
-  defaultObjectTypeIdForVertical,
-  formatAttributeValue,
-  objectTypeExampleKind,
-  requiredAttributeError,
-  serializeAttributeValues,
-  attributeValueFromAsset,
-  assetHasQuantityField,
-  searchableAssetValues,
-  RESTAURANT_OBJECT_TYPE_NAMES,
-  RETAIL_OBJECT_TYPE_NAMES,
-} from '@/lib/objectTypeSchema'
-
-const AVATAR_MAX_BYTES = 1024 * 1024
-const AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+import { apiService, type Asset, type ObjectType } from '@/services/api'
+import { assetHasQuantityField, searchableAssetValues } from '@/lib/objectTypeSchema'
 
 type StockStatus = 'ACTIVE' | 'LOW' | 'OUT'
 
@@ -46,28 +30,15 @@ function formatDate(value: string): string {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString()
 }
 
-function AssetAvatar({ src, size, alt }: { src: string | null; size: 'sm' | 'lg'; alt: string }) {
-  const dim = size === 'sm' ? 'h-8 w-8' : 'h-16 w-16'
-  if (src) {
-    return <img src={src} alt={alt} className={`${dim} rounded-full object-cover shrink-0`} />
-  }
-  return (
-    <div className={`${dim} rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0`} aria-hidden>
-      <Package className={size === 'sm' ? 'h-4 w-4 text-slate-400' : 'h-6 w-6 text-slate-400'} />
-    </div>
-  )
-}
-
 function AssetsPage() {
+  const navigate = useNavigate()
   const vertical = getVerticalContent(getSelectedVertical())
   const [assets, setAssets] = useState<Asset[]>([])
-  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [formTarget, setFormTarget] = useState<'new' | Asset | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null)
+  const [formTarget, setFormTarget] = useState<'new' | null>(null)
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([])
   const importSnap = useSyncExternalStore(subscribeAssetImport, getAssetImportSnapshot)
 
@@ -101,15 +72,10 @@ function AssetsPage() {
         const extras = current.filter((asset) => !ids.has(asset.id))
         return [...extras, ...data]
       })
-      setSelectedAssetId((current) => {
-        if (current && data.some((asset) => asset.id === current)) return current
-        return data[0]?.id ?? current ?? null
-      })
     } catch (err) {
       if (!quiet) {
         setError(toUserMessage(err))
         setAssets([])
-        setSelectedAssetId(null)
       }
     } finally {
       setLoading(false)
@@ -127,7 +93,6 @@ function AssetsPage() {
       if (current.some((asset) => asset.id === incoming.id)) return current
       return [incoming, ...current]
     })
-    setSelectedAssetId((current) => current ?? incoming.id)
     setLoading(false)
   }, [importSnap.lastAsset])
 
@@ -136,32 +101,29 @@ function AssetsPage() {
     void loadAssets({ quiet: true })
   }, [importSnap.status, loadAssets])
 
-  const categories = useMemo(() => {
-    const counts = new Map<string, number>()
+  const typeFilters = useMemo(() => {
+    const counts = new Map<string, { name: string; count: number }>()
     for (const asset of assets) {
-      const key = asset.category || 'Uncategorized'
-      counts.set(key, (counts.get(key) ?? 0) + 1)
+      const id = asset.objectTypeId || 'unknown'
+      const name = asset.objectTypeName || 'Unknown'
+      const current = counts.get(id)
+      if (current) current.count += 1
+      else counts.set(id, { name, count: 1 })
     }
     return Array.from(counts.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, count]) => ({ id: name, name, count }))
+      .sort((a, b) => a[1].name.localeCompare(b[1].name))
+      .map(([id, { name, count }]) => ({ id, name, count }))
   }, [assets])
 
   const filteredAssets = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
     return assets.filter((asset) => {
-      if (selectedCategory && asset.category !== selectedCategory) return false
+      const typeId = asset.objectTypeId || 'unknown'
+      if (selectedTypeId && typeId !== selectedTypeId) return false
       if (!query) return true
       return searchableAssetValues(asset).some((value) => String(value ?? '').toLowerCase().includes(query))
     })
-  }, [assets, searchQuery, selectedCategory])
-
-  const selectedAsset = filteredAssets.find((asset) => asset.id === selectedAssetId)
-    ?? assets.find((asset) => asset.id === selectedAssetId)
-    ?? null
-  const selectedType = objectTypes.find((type) => type.id === selectedAsset?.objectTypeId)
-  const selectedSchema = selectedType?.attributes ?? []
-  const hasQuantityField = selectedAsset ? assetHasQuantityField(selectedAsset, objectTypes) : false
+  }, [assets, searchQuery, selectedTypeId])
 
   const getStatusBadgeVariant = (status: StockStatus) => {
     switch (status) {
@@ -199,665 +161,118 @@ function AssetsPage() {
     >
       <div className="flex flex-1 min-h-0 bg-slate-50 dark:bg-slate-900">
         <div className="w-64 border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 overflow-y-auto">
-          <h2 className="font-semibold text-lg mb-4">Categories</h2>
+          <h2 className="font-semibold text-lg mb-4">Object types</h2>
           <button
             type="button"
-            onClick={() => setSelectedCategory(null)}
+            onClick={() => setSelectedTypeId(null)}
             className={`flex w-full items-center py-1 px-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700 ${
-              selectedCategory === null ? 'bg-slate-100 dark:bg-slate-700 font-medium' : ''
+              selectedTypeId === null ? 'bg-slate-100 dark:bg-slate-700 font-medium' : ''
             }`}
           >
             <span className="flex-1 text-left">All</span>
             <span className="text-xs text-slate-500 dark:text-slate-400">{assets.length}</span>
           </button>
-          {categories.map((category) => (
+          {typeFilters.map((type) => (
             <button
-              key={category.id}
+              key={type.id}
               type="button"
-              onClick={() => setSelectedCategory(category.id)}
+              onClick={() => setSelectedTypeId(type.id)}
               className={`flex w-full items-center py-1 px-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700 ${
-                selectedCategory === category.id ? 'bg-slate-100 dark:bg-slate-700 font-medium' : ''
+                selectedTypeId === type.id ? 'bg-slate-100 dark:bg-slate-700 font-medium' : ''
               }`}
             >
-              <span className="flex-1 text-left">{category.name}</span>
-              <span className="text-xs text-slate-500 dark:text-slate-400">{category.count}</span>
+              <span className="flex-1 text-left">{type.name}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{type.count}</span>
             </button>
           ))}
         </div>
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex flex-1 overflow-hidden">
-            <div className="w-1/3 border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-y-auto">
-              <div className="p-2 space-y-1">
-                {loading ? (
-                  <LoadingState variant="skeleton" label="Loading assets" className="space-y-2 p-2">
-                    {Array.from({ length: 5 }).map((_, index) => (
-                      <div key={index} className="p-3 space-y-2">
-                        <SkeletonBlock className="h-4 w-2/3" />
-                        <SkeletonBlock className="h-3 w-1/2" />
-                      </div>
-                    ))}
-                  </LoadingState>
-                ) : error ? (
-                  <ErrorState
-                    title="Couldn't load assets"
-                    message={error}
-                    onRetry={loadAssets}
-                    className="py-10"
-                  />
-                ) : assets.length === 0 ? (
-                  <EmptyState
-                    icon={<Package className="h-6 w-6 text-slate-500" />}
-                    title="No assets yet"
-                    description="Imported or created items will show up here."
-                    className="py-10"
-                    action={
-                      <Button type="button" onClick={() => setFormTarget('new')}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Add Asset
-                      </Button>
-                    }
-                  />
-                ) : filteredAssets.length === 0 ? (
-                  <EmptyState
-                    title="No assets match this search"
-                    description="Try a different name, SKU, or category."
-                    className="py-10"
-                  />
-                ) : (
-                  filteredAssets.map((asset) => {
-                    const showQuantity = assetHasQuantityField(asset, objectTypes)
-                    const status = showQuantity ? getStockStatus(asset) : null
-                    return (
-                      <button
-                        type="button"
-                        key={asset.id}
-                        className={`w-full text-left p-3 rounded hover:bg-slate-100 dark:hover:bg-slate-700 ${
-                          selectedAsset?.id === asset.id ? 'bg-slate-100 dark:bg-slate-700' : ''
-                        }`}
-                        onClick={() => setSelectedAssetId(asset.id)}
-                      >
-                        <div className="flex items-center gap-3">
-                          <AssetAvatar src={asset.avatar} size="sm" alt={asset.name} />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex justify-between items-center gap-2">
-                              <span className="font-medium truncate">{asset.name}</span>
-                              {status ? <Badge variant={getStatusBadgeVariant(status)}>{status}</Badge> : null}
-                            </div>
-                            <p className="text-sm text-slate-500 dark:text-slate-400">
-                              {asset.objectTypeName || asset.category}
-                              {showQuantity ? ` · Qty ${asset.quantity}` : ''}
-                              {asset.sku ? ` · ${asset.sku}` : ''}
-                            </p>
-                            <p className="text-xs text-slate-400 dark:text-slate-500">
-                              Updated {formatDate(asset.updatedAt)}
-                            </p>
-                          </div>
+        <div className="flex-1 overflow-y-auto bg-white dark:bg-slate-800">
+          <div className="p-2 space-y-1">
+            {loading ? (
+              <LoadingState variant="skeleton" label="Loading assets" className="space-y-2 p-2">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <div key={index} className="p-3 space-y-2">
+                    <SkeletonBlock className="h-4 w-2/3" />
+                    <SkeletonBlock className="h-3 w-1/2" />
+                  </div>
+                ))}
+              </LoadingState>
+            ) : error ? (
+              <ErrorState
+                title="Couldn't load assets"
+                message={error}
+                onRetry={loadAssets}
+                className="py-10"
+              />
+            ) : assets.length === 0 ? (
+              <EmptyState
+                icon={<Package className="h-6 w-6 text-slate-500" />}
+                title="No assets yet"
+                description="Imported or created items will show up here."
+                className="py-10"
+                action={
+                  <Button type="button" onClick={() => setFormTarget('new')}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Asset
+                  </Button>
+                }
+              />
+            ) : filteredAssets.length === 0 ? (
+              <EmptyState
+                title="No assets match this search"
+                description="Try a different name, SKU, or object type."
+                className="py-10"
+              />
+            ) : (
+              filteredAssets.map((asset) => {
+                const showQuantity = assetHasQuantityField(asset, objectTypes)
+                const status = showQuantity ? getStockStatus(asset) : null
+                return (
+                  <button
+                    type="button"
+                    key={asset.id}
+                    className="w-full text-left p-3 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
+                    onClick={() => navigate(`/assets/${asset.id}`)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <AssetAvatar src={asset.avatar} size="sm" alt={asset.name} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex justify-between items-center gap-2">
+                          <span className="font-medium truncate">{asset.name}</span>
+                          {status ? <Badge variant={getStatusBadgeVariant(status)}>{status}</Badge> : null}
                         </div>
-                      </button>
-                    )
-                  })
-                )}
-              </div>
-            </div>
-
-            <div className="flex-1 p-6 overflow-y-auto bg-white dark:bg-slate-900">
-              {loading ? (
-                <LoadingState variant="skeleton" label="Loading asset details" className="space-y-4 max-w-xl">
-                  <SkeletonBlock className="h-8 w-48" />
-                  <SkeletonBlock className="h-40 w-full" />
-                </LoadingState>
-              ) : error ? (
-                <EmptyState
-                  icon={<Package className="h-6 w-6 text-slate-500" />}
-                  title="Asset details unavailable"
-                  description="Fix the list error to see item details."
-                />
-              ) : selectedAsset ? (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="lg:col-span-2 space-y-6">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-4 min-w-0">
-                        <AssetAvatar src={selectedAsset.avatar} size="lg" alt={selectedAsset.name} />
-                        <div>
-                          <h2 className="text-2xl font-bold">{selectedAsset.name}</h2>
-                          <div className="flex items-center mt-2">
-                            {hasQuantityField ? (
-                              <Badge variant={getStatusBadgeVariant(getStockStatus(selectedAsset))}>
-                                {getStockStatus(selectedAsset)}
-                              </Badge>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-9 w-9 p-0"
-                          aria-label="Edit"
-                          onClick={() => setFormTarget(selectedAsset)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <button
-                          type="button"
-                          aria-label="Delete asset"
-                          onClick={() => setDeleteTarget(selectedAsset)}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-700 transition-colors hover:bg-red-100 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/30"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                          {asset.objectTypeName || 'Unknown'}
+                          {showQuantity ? ` · Qty ${asset.quantity}` : ''}
+                          {asset.sku ? ` · ${asset.sku}` : ''}
+                        </p>
+                        <p className="text-xs text-slate-400 dark:text-slate-500">
+                          Updated {formatDate(asset.updatedAt)}
+                        </p>
                       </div>
                     </div>
-
-                    <Card className="p-6">
-                      <h3 className="font-medium mb-4">Details</h3>
-                      <div className="space-y-4">
-                        <DetailItem label="Object type" value={selectedAsset.objectTypeName} />
-                        {selectedSchema.length > 0 ? (
-                          selectedSchema.map((attribute) => (
-                            <DetailItem
-                              key={attribute.id || attribute.name}
-                              label={attribute.label}
-                              value={formatAttributeValue(
-                                attribute,
-                                attributeValueFromAsset(selectedAsset, attribute.name)
-                              )}
-                            />
-                          ))
-                        ) : (
-                          <>
-                            <DetailItem label="SKU" value={selectedAsset.sku} />
-                            <DetailItem label="Quantity" value={String(selectedAsset.quantity)} />
-                            <DetailItem label="Location" value={selectedAsset.location} />
-                          </>
-                        )}
-                        <DetailItem label="Updated" value={formatDate(selectedAsset.updatedAt)} />
-                      </div>
-                    </Card>
-
-                    {selectedAsset.description ? (
-                      <Card className="p-6">
-                        <h3 className="font-medium mb-2">Description</h3>
-                        <p className="text-sm text-slate-600 dark:text-slate-400">{selectedAsset.description}</p>
-                      </Card>
-                    ) : null}
-                  </div>
-
-                  <div className="space-y-6">
-                    {hasQuantityField || selectedSchema.length === 0 ? (
-                      <Card className="p-6">
-                        <h3 className="font-medium mb-4">Stock</h3>
-                        <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">
-                          {selectedAsset.quantity}
-                        </p>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                          Reorder when at or below {selectedAsset.minQuantity}
-                        </p>
-                      </Card>
-                    ) : null}
-                  </div>
-                </div>
-              ) : (
-                <EmptyState
-                  icon={<Package className="h-6 w-6 text-slate-500" />}
-                  title="No asset selected"
-                  description="Select an asset from the list to view details"
-                />
-              )}
-            </div>
+                  </button>
+                )
+              })
+            )}
           </div>
         </div>
       </div>
-      {formTarget ? (
+      {formTarget === 'new' ? (
         <AssetFormDialog
-          asset={formTarget === 'new' ? null : formTarget}
+          asset={null}
+          initialObjectTypes={objectTypes}
           onClose={() => setFormTarget(null)}
-          onSaved={async (assetId) => {
+          onSaved={async (saved) => {
             setFormTarget(null)
-            await loadAssets()
-            setSelectedAssetId(assetId)
-          }}
-        />
-      ) : null}
-      {deleteTarget ? (
-        <DeleteAssetDialog
-          asset={deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          onDeleted={(assetId) => {
-            setDeleteTarget(null)
-            setAssets((current) => {
-              const next = current.filter((asset) => asset.id !== assetId)
-              setSelectedAssetId((selected) => {
-                if (selected !== assetId) return selected
-                return next[0]?.id ?? null
-              })
-              return next
-            })
+            setAssets((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
+            await loadAssets({ quiet: true })
+            navigate(`/assets/${saved.id}`)
           }}
         />
       ) : null}
     </PageShell>
-  )
-}
-
-function AssetFormDialog({
-  asset,
-  onClose,
-  onSaved,
-}: {
-  asset: Asset | null
-  onClose: () => void
-  onSaved: (assetId: string) => Promise<void>
-}) {
-  const isEdit = Boolean(asset)
-  const verticalId = getSelectedVertical()
-  const [name, setName] = useState(asset?.name ?? '')
-  const [description, setDescription] = useState(asset?.description ?? '')
-  const [avatar, setAvatar] = useState(asset?.avatar ?? '')
-  const [objectTypeId, setObjectTypeId] = useState(asset?.objectTypeId ?? '')
-  const [objectTypes, setObjectTypes] = useState<ObjectType[]>([])
-  const [attributeValues, setAttributeValues] = useState<Record<string, string | boolean>>({})
-  const [typesLoading, setTypesLoading] = useState(true)
-  const [typesError, setTypesError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [formError, setFormError] = useState<string | null>(null)
-  const avatarInputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    const loadTypes = async () => {
-      try {
-        setTypesLoading(true)
-        setTypesError(null)
-        const data = await apiService.getObjectTypes()
-        if (cancelled) return
-        setObjectTypes(data)
-        setObjectTypeId((current) => {
-          if (current && data.some((type) => type.id === current)) return current
-          return defaultObjectTypeIdForVertical(data, verticalId) || current
-        })
-      } catch (err) {
-        if (!cancelled) {
-          setTypesError(toUserMessage(err))
-          setObjectTypes([])
-        }
-      } finally {
-        if (!cancelled) setTypesLoading(false)
-      }
-    }
-    void loadTypes()
-    return () => {
-      cancelled = true
-    }
-  }, [verticalId])
-
-  const selectedType = objectTypes.find((type) => type.id === objectTypeId)
-  const schemaAttributes = selectedType?.attributes ?? []
-  const exampleKind = selectedType ? objectTypeExampleKind(selectedType.name) : null
-  const selectableTypes = objectTypes.filter((type) => type.isActive || type.id === objectTypeId)
-  const retailTypes = selectableTypes.filter((type) =>
-    (RETAIL_OBJECT_TYPE_NAMES as readonly string[]).includes(type.name)
-  )
-  const restaurantTypes = selectableTypes.filter((type) =>
-    (RESTAURANT_OBJECT_TYPE_NAMES as readonly string[]).includes(type.name)
-  )
-  const otherTypes = selectableTypes.filter((type) => objectTypeExampleKind(type.name) == null)
-
-  useEffect(() => {
-    const attributes = selectedType?.attributes ?? []
-    const reuseAsset = Boolean(asset && selectedType && selectedType.id === asset.objectTypeId)
-    setAttributeValues((current) => {
-      const next: Record<string, string | boolean> = {}
-      let changed = Object.keys(current).length !== attributes.length
-      for (const attribute of attributes) {
-        const value =
-          current[attribute.name] !== undefined
-            ? current[attribute.name]
-            : defaultAttributeFormValue(attribute, reuseAsset ? asset : null)
-        next[attribute.name] = value
-        if (current[attribute.name] !== value) changed = true
-      }
-      return changed ? next : current
-    })
-  }, [asset, selectedType])
-
-  const setAttributeValue = (name: string, value: string | boolean) => {
-    setAttributeValues((current) => ({ ...current, [name]: value }))
-  }
-
-  const pickAvatar = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    if (!AVATAR_TYPES.includes(file.type)) {
-      setFormError('Use a JPEG, PNG, WebP, or GIF image.')
-      return
-    }
-    if (file.size > AVATAR_MAX_BYTES) {
-      setFormError('Avatar must be 1MB or smaller.')
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = () => {
-      setAvatar(String(reader.result ?? ''))
-      setFormError(null)
-    }
-    reader.readAsDataURL(file)
-  }
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    const trimmedName = name.trim()
-    if (!trimmedName) {
-      setFormError('Name is required.')
-      return
-    }
-    if (!objectTypeId) {
-      setFormError('Object type is required.')
-      return
-    }
-
-    const requiredError = requiredAttributeError(schemaAttributes, attributeValues)
-    if (requiredError) {
-      setFormError(requiredError)
-      return
-    }
-
-    const customFields = serializeAttributeValues(schemaAttributes, attributeValues)
-    const payload = {
-      name: trimmedName,
-      objectTypeId,
-      sku: typeof customFields.sku === 'string' ? customFields.sku : undefined,
-      quantity: typeof customFields.quantity === 'number' ? customFields.quantity : undefined,
-      minQuantity: typeof customFields.min_quantity === 'number' ? customFields.min_quantity : undefined,
-      unitCost: typeof customFields.unit_cost === 'number' ? customFields.unit_cost : null,
-      supplier: typeof customFields.supplier === 'string' ? customFields.supplier : undefined,
-      location: typeof customFields.location === 'string' ? customFields.location : undefined,
-      description: description.trim() || undefined,
-      avatar: avatar.trim() || null,
-      customFields,
-    }
-
-    try {
-      setSaving(true)
-      setFormError(null)
-      const saved = asset
-        ? await apiService.updateAsset(asset.id, payload)
-        : await apiService.createAsset(payload)
-      await onSaved(saved.id)
-    } catch (err) {
-      setFormError(toUserMessage(err))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const title = isEdit ? 'Edit Asset' : 'Add Asset'
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
-      role="presentation"
-      onMouseDown={(event: MouseEvent<HTMLDivElement>) => {
-        if (event.target === event.currentTarget) onClose()
-      }}
-    >
-      <Card
-        role="dialog"
-        aria-labelledby="asset-form-title"
-        className="w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto"
-      >
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <h2 id="asset-form-title" className="text-lg font-semibold">
-            {title}
-          </h2>
-          <Button type="button" variant="ghost" size="sm" onClick={onClose} aria-label="Close">
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-        <form className="space-y-4" onSubmit={submit}>
-          <FormField label="Avatar" htmlFor="asset-avatar">
-            <div className="flex items-center gap-3">
-              <AssetAvatar src={avatar || null} size="lg" alt="Avatar preview" />
-              <input
-                ref={avatarInputRef}
-                id="asset-avatar"
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                className="hidden"
-                onChange={pickAvatar}
-              />
-              <Button type="button" variant="outline" size="sm" onClick={() => avatarInputRef.current?.click()}>
-                Choose image
-              </Button>
-              {avatar ? (
-                <Button type="button" variant="ghost" size="sm" onClick={() => setAvatar('')}>
-                  Remove
-                </Button>
-              ) : null}
-            </div>
-          </FormField>
-          <FormField label="Name" htmlFor="asset-name" required>
-            <Input
-              id="asset-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              autoFocus
-              required
-            />
-          </FormField>
-          <FormField label="Object type" htmlFor="asset-object-type" required error={typesError ?? undefined}>
-            {typesLoading ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">Loading object types…</p>
-            ) : objectTypes.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">No object types available.</p>
-            ) : (
-              <>
-                <select
-                  id="asset-object-type"
-                  className={nativeSelectClassName}
-                  value={objectTypeId}
-                  onChange={(event) => {
-                    setObjectTypeId(event.target.value)
-                    setAttributeValues({})
-                  }}
-                  required
-                >
-                  {retailTypes.length > 0 ? (
-                    <optgroup label="Retail">
-                      {retailTypes.map((type) => (
-                        <option key={type.id} value={type.id}>
-                          {type.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                  {restaurantTypes.length > 0 ? (
-                    <optgroup label="Restaurant">
-                      {restaurantTypes.map((type) => (
-                        <option key={type.id} value={type.id}>
-                          {type.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                  {otherTypes.length > 0 ? (
-                    <optgroup label="Other">
-                      {otherTypes.map((type) => (
-                        <option key={type.id} value={type.id}>
-                          {type.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                </select>
-                {exampleKind ? (
-                  <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                    {exampleKind === 'retail' ? 'Retail example schema' : 'Restaurant example schema'}
-                  </p>
-                ) : null}
-              </>
-            )}
-          </FormField>
-          {typesLoading ? null : schemaAttributes.length > 0 ? (
-            schemaAttributes.map((attribute) => (
-              <SchemaAttributeField
-                key={attribute.id || attribute.name}
-                attribute={attribute}
-                value={attributeValues[attribute.name]}
-                onChange={(value) => setAttributeValue(attribute.name, value)}
-              />
-            ))
-          ) : (
-            <p className="text-sm text-slate-500 dark:text-slate-400">No schema fields for this type yet.</p>
-          )}
-          <FormField label="Description" htmlFor="asset-description">
-            <Textarea
-              id="asset-description"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              rows={3}
-            />
-          </FormField>
-          {formError ? (
-            <p className="text-sm text-red-600">{formError}</p>
-          ) : null}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={saving || typesLoading || !objectTypeId || Boolean(typesError)}>
-              {saving ? 'Saving…' : 'Save'}
-            </Button>
-          </div>
-        </form>
-      </Card>
-    </div>
-  )
-}
-
-function DeleteAssetDialog({
-  asset,
-  onClose,
-  onDeleted,
-}: {
-  asset: Asset
-  onClose: () => void
-  onDeleted: (assetId: string) => void
-}) {
-  const [deleting, setDeleting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const confirmDelete = async () => {
-    try {
-      setDeleting(true)
-      setError(null)
-      await apiService.deleteAsset(asset.id)
-      onDeleted(asset.id)
-    } catch (err) {
-      setError(toUserMessage(err))
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
-      role="presentation"
-      onMouseDown={(event: MouseEvent<HTMLDivElement>) => {
-        if (event.target === event.currentTarget && !deleting) onClose()
-      }}
-    >
-      <Card role="dialog" aria-labelledby="delete-asset-title" className="w-full max-w-md p-6">
-        <h2 id="delete-asset-title" className="text-lg font-semibold">
-          Delete asset?
-        </h2>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-          “{asset.name}” will be removed from your list. This cannot be undone.
-        </p>
-        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-        <div className="mt-6 flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onClose} disabled={deleting}>
-            Cancel
-          </Button>
-          <Button type="button" variant="destructive" onClick={() => void confirmDelete()} disabled={deleting}>
-            {deleting ? 'Deleting…' : 'Delete'}
-          </Button>
-        </div>
-      </Card>
-    </div>
-  )
-}
-
-function SchemaAttributeField({
-  attribute,
-  value,
-  onChange,
-}: {
-  attribute: ObjectTypeAttribute
-  value: string | boolean | undefined
-  onChange: (value: string | boolean) => void
-}) {
-  const fieldId = `asset-${attribute.name.replace(/_/g, '-')}`
-  const numberMin =
-    attribute.dataType === 'number' && ['quantity', 'min_quantity', 'unit_cost', 'capacity'].includes(attribute.name)
-      ? '0'
-      : undefined
-  if (attribute.dataType === 'boolean') {
-    return (
-      <FormField label={attribute.label} htmlFor={fieldId} required={attribute.required}>
-        <label className="flex items-center gap-2 text-sm" htmlFor={fieldId}>
-          <input
-            id={fieldId}
-            type="checkbox"
-            checked={value === true}
-            onChange={(event) => onChange(event.target.checked)}
-          />
-          <span>Yes</span>
-        </label>
-      </FormField>
-    )
-  }
-
-  if (attribute.dataType === 'text') {
-    return (
-      <FormField label={attribute.label} htmlFor={fieldId} required={attribute.required}>
-        <Textarea
-          id={fieldId}
-          value={typeof value === 'string' ? value : ''}
-          onChange={(event) => onChange(event.target.value)}
-          required={attribute.required}
-          rows={3}
-        />
-      </FormField>
-    )
-  }
-
-  return (
-    <FormField label={attribute.label} htmlFor={fieldId} required={attribute.required}>
-      <Input
-        id={fieldId}
-        type={attribute.dataType === 'number' ? 'number' : 'text'}
-        min={numberMin}
-        step={attribute.name === 'unit_cost' || attribute.name === 'temperature' ? '0.01' : undefined}
-        value={typeof value === 'string' ? value : ''}
-        onChange={(event) => onChange(event.target.value)}
-        required={attribute.required}
-      />
-    </FormField>
-  )
-}
-
-function DetailItem({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="grid grid-cols-3 gap-4">
-      <div className="text-sm text-slate-500 dark:text-slate-400">{label}</div>
-      <div className="col-span-2 text-sm font-medium">{value || '—'}</div>
-    </div>
   )
 }
 

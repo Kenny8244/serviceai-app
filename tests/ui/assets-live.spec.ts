@@ -49,7 +49,13 @@ test('assets list shows live workspace data and an Add Asset action', async ({ p
   await expect(page.getByRole('img', { name: 'Avatar preview' })).toBeVisible()
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByRole('dialog', { name: 'Add Asset' })).toHaveCount(0)
-  await expect(page.getByText(createdName).first()).toBeVisible()
+  await expect(page).toHaveURL(/\/assets\/[^/]+$/)
+  await expect(page.getByRole('heading', { name: createdName })).toBeVisible()
+  await expect(page.getByRole('img', { name: createdName }).first()).toBeVisible()
+  await expect(page.getByText('No service requests yet')).toBeVisible()
+
+  await page.reload()
+  await expect(page.getByRole('heading', { name: createdName })).toBeVisible()
   await expect(page.getByRole('img', { name: createdName }).first()).toBeVisible()
 
   await page.getByRole('button', { name: 'Edit' }).click()
@@ -59,13 +65,16 @@ test('assets list shows live workspace data and an Add Asset action', async ({ p
   await page.getByLabel(/location/i).fill('Back room')
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByRole('dialog', { name: 'Edit Asset' })).toHaveCount(0)
-  await expect(page.getByText(editedName).first()).toBeVisible()
+  await expect(page.getByRole('heading', { name: editedName })).toBeVisible()
   await expect(page.getByText('Back room').first()).toBeVisible()
 
   await page.getByRole('button', { name: 'Edit' }).click()
   await expect(page.getByRole('dialog', { name: 'Edit Asset' })).toBeVisible()
   await expect(page.getByLabel(/location/i)).toHaveValue('Back room')
   await page.getByRole('button', { name: 'Cancel' }).click()
+
+  await page.getByRole('button', { name: 'Back to list' }).click()
+  await expect(page).toHaveURL(/\/assets$/)
 
   await page.getByRole('button', { name: 'Add Asset' }).first().click()
   await expect(page.getByRole('dialog', { name: 'Add Asset' })).toBeVisible()
@@ -77,7 +86,8 @@ test('assets list shows live workspace data and an Add Asset action', async ({ p
   await page.getByLabel(/^perishable$/i).check()
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByRole('dialog', { name: 'Add Asset' })).toHaveCount(0)
-  await expect(page.getByText(ingredientName).first()).toBeVisible()
+  await expect(page).toHaveURL(/\/assets\/[^/]+$/)
+  await expect(page.getByRole('heading', { name: ingredientName })).toBeVisible()
 
   await page.getByRole('button', { name: 'Edit' }).click()
   await expect(page.getByRole('dialog', { name: 'Edit Asset' })).toBeVisible()
@@ -90,8 +100,11 @@ test('assets list shows live workspace data and an Add Asset action', async ({ p
   await expect(ingredientDelete).toBeVisible()
   await ingredientDelete.getByRole('button', { name: 'Delete' }).click()
   await expect(page.getByRole('dialog', { name: 'Delete asset?' })).toHaveCount(0)
+  await expect(page).toHaveURL(/\/assets$/)
 
   await page.getByText(editedName).first().click()
+  await expect(page).toHaveURL(/\/assets\/[^/]+$/)
+  await expect(page.getByRole('heading', { name: editedName })).toBeVisible()
 
   await page.getByRole('button', { name: /delete asset/i }).click()
   const deleteDialog = page.getByRole('dialog', { name: 'Delete asset?' })
@@ -99,6 +112,7 @@ test('assets list shows live workspace data and an Add Asset action', async ({ p
   await expect(deleteDialog).toContainText(editedName)
   await deleteDialog.getByRole('button', { name: 'Delete' }).click()
   await expect(page.getByRole('dialog', { name: 'Delete asset?' })).toHaveCount(0)
+  await expect(page).toHaveURL(/\/assets$/)
   await expect(page.getByText(editedName)).toHaveCount(0)
 
   await page.reload()
