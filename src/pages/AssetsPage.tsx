@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { FormField } from '@/components/ui/form-field'
+import { FormField, nativeSelectClassName } from '@/components/ui/form-field'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState, SkeletonBlock } from '@/components/ui/loading-state'
@@ -14,7 +14,20 @@ import { getAssetImportSnapshot, subscribeAssetImport } from '@/lib/assetImportJ
 import { getSelectedVertical } from '@/lib/verticalStorage'
 import { getVerticalContent } from '@/lib/verticalContent'
 import { toUserMessage } from '@/lib/userFacingError'
-import { apiService, type Asset } from '@/services/api'
+import { apiService, type Asset, type ObjectType, type ObjectTypeAttribute } from '@/services/api'
+import {
+  defaultAttributeFormValue,
+  defaultObjectTypeIdForVertical,
+  formatAttributeValue,
+  objectTypeExampleKind,
+  requiredAttributeError,
+  serializeAttributeValues,
+  attributeValueFromAsset,
+  assetHasQuantityField,
+  searchableAssetValues,
+  RESTAURANT_OBJECT_TYPE_NAMES,
+  RETAIL_OBJECT_TYPE_NAMES,
+} from '@/lib/objectTypeSchema'
 
 const AVATAR_MAX_BYTES = 1024 * 1024
 const AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
@@ -25,11 +38,6 @@ function getStockStatus(asset: Asset): StockStatus {
   if (asset.quantity <= 0) return 'OUT'
   if (asset.quantity <= asset.minQuantity) return 'LOW'
   return 'ACTIVE'
-}
-
-function formatCurrency(value: number | null): string {
-  if (value == null || Number.isNaN(value)) return '—'
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(value)
 }
 
 function formatDate(value: string): string {
@@ -60,7 +68,24 @@ function AssetsPage() {
   const [error, setError] = useState<string | null>(null)
   const [formTarget, setFormTarget] = useState<'new' | Asset | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null)
+  const [objectTypes, setObjectTypes] = useState<ObjectType[]>([])
   const importSnap = useSyncExternalStore(subscribeAssetImport, getAssetImportSnapshot)
+
+  useEffect(() => {
+    let cancelled = false
+    const loadTypes = async () => {
+      try {
+        const data = await apiService.getObjectTypes()
+        if (!cancelled) setObjectTypes(data)
+      } catch {
+        if (!cancelled) setObjectTypes([])
+      }
+    }
+    void loadTypes()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const loadAssets = useCallback(async (options?: { quiet?: boolean }) => {
     const quiet = Boolean(options?.quiet)
@@ -127,14 +152,16 @@ function AssetsPage() {
     return assets.filter((asset) => {
       if (selectedCategory && asset.category !== selectedCategory) return false
       if (!query) return true
-      return [asset.name, asset.sku, asset.category, asset.supplier, asset.location]
-        .some((value) => (value ?? '').toLowerCase().includes(query))
+      return searchableAssetValues(asset).some((value) => String(value ?? '').toLowerCase().includes(query))
     })
   }, [assets, searchQuery, selectedCategory])
 
   const selectedAsset = filteredAssets.find((asset) => asset.id === selectedAssetId)
     ?? assets.find((asset) => asset.id === selectedAssetId)
     ?? null
+  const selectedType = objectTypes.find((type) => type.id === selectedAsset?.objectTypeId)
+  const selectedSchema = selectedType?.attributes ?? []
+  const hasQuantityField = selectedAsset ? assetHasQuantityField(selectedAsset, objectTypes) : false
 
   const getStatusBadgeVariant = (status: StockStatus) => {
     switch (status) {
@@ -239,7 +266,8 @@ function AssetsPage() {
                   />
                 ) : (
                   filteredAssets.map((asset) => {
-                    const status = getStockStatus(asset)
+                    const showQuantity = assetHasQuantityField(asset, objectTypes)
+                    const status = showQuantity ? getStockStatus(asset) : null
                     return (
                       <button
                         type="button"
@@ -254,11 +282,11 @@ function AssetsPage() {
                           <div className="min-w-0 flex-1">
                             <div className="flex justify-between items-center gap-2">
                               <span className="font-medium truncate">{asset.name}</span>
-                              <Badge variant={getStatusBadgeVariant(status)}>{status}</Badge>
+                              {status ? <Badge variant={getStatusBadgeVariant(status)}>{status}</Badge> : null}
                             </div>
                             <p className="text-sm text-slate-500 dark:text-slate-400">
-                              {asset.category}
-                              {asset.quantity != null ? ` · Qty ${asset.quantity}` : ''}
+                              {asset.objectTypeName || asset.category}
+                              {showQuantity ? ` · Qty ${asset.quantity}` : ''}
                               {asset.sku ? ` · ${asset.sku}` : ''}
                             </p>
                             <p className="text-xs text-slate-400 dark:text-slate-500">
@@ -294,9 +322,11 @@ function AssetsPage() {
                         <div>
                           <h2 className="text-2xl font-bold">{selectedAsset.name}</h2>
                           <div className="flex items-center mt-2">
-                            <Badge variant={getStatusBadgeVariant(getStockStatus(selectedAsset))}>
-                              {getStockStatus(selectedAsset)}
-                            </Badge>
+                            {hasQuantityField ? (
+                              <Badge variant={getStatusBadgeVariant(getStockStatus(selectedAsset))}>
+                                {getStockStatus(selectedAsset)}
+                              </Badge>
+                            ) : null}
                           </div>
                         </div>
                       </div>
@@ -313,7 +343,7 @@ function AssetsPage() {
                         </Button>
                         <button
                           type="button"
-                          aria-label="Delete product"
+                          aria-label="Delete asset"
                           onClick={() => setDeleteTarget(selectedAsset)}
                           className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-700 transition-colors hover:bg-red-100 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/30"
                         >
@@ -325,13 +355,25 @@ function AssetsPage() {
                     <Card className="p-6">
                       <h3 className="font-medium mb-4">Details</h3>
                       <div className="space-y-4">
-                        <DetailItem label="SKU" value={selectedAsset.sku} />
-                        <DetailItem label="Category" value={selectedAsset.category} />
-                        <DetailItem label="Quantity" value={String(selectedAsset.quantity)} />
-                        <DetailItem label="Minimum quantity" value={String(selectedAsset.minQuantity)} />
-                        <DetailItem label="Unit cost" value={formatCurrency(selectedAsset.unitCost)} />
-                        <DetailItem label="Supplier" value={selectedAsset.supplier} />
-                        <DetailItem label="Location" value={selectedAsset.location} />
+                        <DetailItem label="Object type" value={selectedAsset.objectTypeName} />
+                        {selectedSchema.length > 0 ? (
+                          selectedSchema.map((attribute) => (
+                            <DetailItem
+                              key={attribute.id || attribute.name}
+                              label={attribute.label}
+                              value={formatAttributeValue(
+                                attribute,
+                                attributeValueFromAsset(selectedAsset, attribute.name)
+                              )}
+                            />
+                          ))
+                        ) : (
+                          <>
+                            <DetailItem label="SKU" value={selectedAsset.sku} />
+                            <DetailItem label="Quantity" value={String(selectedAsset.quantity)} />
+                            <DetailItem label="Location" value={selectedAsset.location} />
+                          </>
+                        )}
                         <DetailItem label="Updated" value={formatDate(selectedAsset.updatedAt)} />
                       </div>
                     </Card>
@@ -345,15 +387,17 @@ function AssetsPage() {
                   </div>
 
                   <div className="space-y-6">
-                    <Card className="p-6">
-                      <h3 className="font-medium mb-4">Stock</h3>
-                      <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">
-                        {selectedAsset.quantity}
-                      </p>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                        Reorder when at or below {selectedAsset.minQuantity}
-                      </p>
-                    </Card>
+                    {hasQuantityField || selectedSchema.length === 0 ? (
+                      <Card className="p-6">
+                        <h3 className="font-medium mb-4">Stock</h3>
+                        <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">
+                          {selectedAsset.quantity}
+                        </p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                          Reorder when at or below {selectedAsset.minQuantity}
+                        </p>
+                      </Card>
+                    ) : null}
                   </div>
                 </div>
               ) : (
@@ -409,19 +453,80 @@ function AssetFormDialog({
   onSaved: (assetId: string) => Promise<void>
 }) {
   const isEdit = Boolean(asset)
+  const verticalId = getSelectedVertical()
   const [name, setName] = useState(asset?.name ?? '')
-  const [category, setCategory] = useState(asset?.category ?? '')
-  const [sku, setSku] = useState(asset?.sku ?? '')
-  const [quantity, setQuantity] = useState(asset ? String(asset.quantity) : '0')
-  const [minQuantity, setMinQuantity] = useState(asset ? String(asset.minQuantity) : '0')
-  const [unitCost, setUnitCost] = useState(asset?.unitCost == null ? '' : String(asset.unitCost))
-  const [supplier, setSupplier] = useState(asset?.supplier ?? '')
-  const [location, setLocation] = useState(asset?.location ?? '')
   const [description, setDescription] = useState(asset?.description ?? '')
   const [avatar, setAvatar] = useState(asset?.avatar ?? '')
+  const [objectTypeId, setObjectTypeId] = useState(asset?.objectTypeId ?? '')
+  const [objectTypes, setObjectTypes] = useState<ObjectType[]>([])
+  const [attributeValues, setAttributeValues] = useState<Record<string, string | boolean>>({})
+  const [typesLoading, setTypesLoading] = useState(true)
+  const [typesError, setTypesError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const avatarInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const loadTypes = async () => {
+      try {
+        setTypesLoading(true)
+        setTypesError(null)
+        const data = await apiService.getObjectTypes()
+        if (cancelled) return
+        setObjectTypes(data)
+        setObjectTypeId((current) => {
+          if (current && data.some((type) => type.id === current)) return current
+          return defaultObjectTypeIdForVertical(data, verticalId) || current
+        })
+      } catch (err) {
+        if (!cancelled) {
+          setTypesError(toUserMessage(err))
+          setObjectTypes([])
+        }
+      } finally {
+        if (!cancelled) setTypesLoading(false)
+      }
+    }
+    void loadTypes()
+    return () => {
+      cancelled = true
+    }
+  }, [verticalId])
+
+  const selectedType = objectTypes.find((type) => type.id === objectTypeId)
+  const schemaAttributes = selectedType?.attributes ?? []
+  const exampleKind = selectedType ? objectTypeExampleKind(selectedType.name) : null
+  const selectableTypes = objectTypes.filter((type) => type.isActive || type.id === objectTypeId)
+  const retailTypes = selectableTypes.filter((type) =>
+    (RETAIL_OBJECT_TYPE_NAMES as readonly string[]).includes(type.name)
+  )
+  const restaurantTypes = selectableTypes.filter((type) =>
+    (RESTAURANT_OBJECT_TYPE_NAMES as readonly string[]).includes(type.name)
+  )
+  const otherTypes = selectableTypes.filter((type) => objectTypeExampleKind(type.name) == null)
+
+  useEffect(() => {
+    const attributes = selectedType?.attributes ?? []
+    const reuseAsset = Boolean(asset && selectedType && selectedType.id === asset.objectTypeId)
+    setAttributeValues((current) => {
+      const next: Record<string, string | boolean> = {}
+      let changed = Object.keys(current).length !== attributes.length
+      for (const attribute of attributes) {
+        const value =
+          current[attribute.name] !== undefined
+            ? current[attribute.name]
+            : defaultAttributeFormValue(attribute, reuseAsset ? asset : null)
+        next[attribute.name] = value
+        if (current[attribute.name] !== value) changed = true
+      }
+      return changed ? next : current
+    })
+  }, [asset, selectedType])
+
+  const setAttributeValue = (name: string, value: string | boolean) => {
+    setAttributeValues((current) => ({ ...current, [name]: value }))
+  }
 
   const pickAvatar = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -450,18 +555,30 @@ function AssetFormDialog({
       setFormError('Name is required.')
       return
     }
+    if (!objectTypeId) {
+      setFormError('Object type is required.')
+      return
+    }
 
+    const requiredError = requiredAttributeError(schemaAttributes, attributeValues)
+    if (requiredError) {
+      setFormError(requiredError)
+      return
+    }
+
+    const customFields = serializeAttributeValues(schemaAttributes, attributeValues)
     const payload = {
       name: trimmedName,
-      category: category.trim() || undefined,
-      sku: sku.trim() || undefined,
-      quantity: Number(quantity) || 0,
-      minQuantity: Number(minQuantity) || 0,
-      unitCost: unitCost.trim() === '' || !Number.isFinite(Number(unitCost)) ? null : Number(unitCost),
-      supplier: supplier.trim() || undefined,
-      location: location.trim() || undefined,
+      objectTypeId,
+      sku: typeof customFields.sku === 'string' ? customFields.sku : undefined,
+      quantity: typeof customFields.quantity === 'number' ? customFields.quantity : undefined,
+      minQuantity: typeof customFields.min_quantity === 'number' ? customFields.min_quantity : undefined,
+      unitCost: typeof customFields.unit_cost === 'number' ? customFields.unit_cost : null,
+      supplier: typeof customFields.supplier === 'string' ? customFields.supplier : undefined,
+      location: typeof customFields.location === 'string' ? customFields.location : undefined,
       description: description.trim() || undefined,
       avatar: avatar.trim() || null,
+      customFields,
     }
 
     try {
@@ -532,62 +649,71 @@ function AssetFormDialog({
               required
             />
           </FormField>
-          <FormField label="Category" htmlFor="asset-category">
-            <Input
-              id="asset-category"
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-            />
+          <FormField label="Object type" htmlFor="asset-object-type" required error={typesError ?? undefined}>
+            {typesLoading ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">Loading object types…</p>
+            ) : objectTypes.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">No object types available.</p>
+            ) : (
+              <>
+                <select
+                  id="asset-object-type"
+                  className={nativeSelectClassName}
+                  value={objectTypeId}
+                  onChange={(event) => {
+                    setObjectTypeId(event.target.value)
+                    setAttributeValues({})
+                  }}
+                  required
+                >
+                  {retailTypes.length > 0 ? (
+                    <optgroup label="Retail">
+                      {retailTypes.map((type) => (
+                        <option key={type.id} value={type.id}>
+                          {type.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                  {restaurantTypes.length > 0 ? (
+                    <optgroup label="Restaurant">
+                      {restaurantTypes.map((type) => (
+                        <option key={type.id} value={type.id}>
+                          {type.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                  {otherTypes.length > 0 ? (
+                    <optgroup label="Other">
+                      {otherTypes.map((type) => (
+                        <option key={type.id} value={type.id}>
+                          {type.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                </select>
+                {exampleKind ? (
+                  <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                    {exampleKind === 'retail' ? 'Retail example schema' : 'Restaurant example schema'}
+                  </p>
+                ) : null}
+              </>
+            )}
           </FormField>
-          <div className="grid grid-cols-2 gap-4">
-            <FormField label="SKU" htmlFor="asset-sku">
-              <Input id="asset-sku" value={sku} onChange={(event) => setSku(event.target.value)} />
-            </FormField>
-            <FormField label="Quantity" htmlFor="asset-quantity">
-              <Input
-                id="asset-quantity"
-                type="number"
-                min="0"
-                value={quantity}
-                onChange={(event) => setQuantity(event.target.value)}
+          {typesLoading ? null : schemaAttributes.length > 0 ? (
+            schemaAttributes.map((attribute) => (
+              <SchemaAttributeField
+                key={attribute.id || attribute.name}
+                attribute={attribute}
+                value={attributeValues[attribute.name]}
+                onChange={(value) => setAttributeValue(attribute.name, value)}
               />
-            </FormField>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <FormField label="Minimum quantity" htmlFor="asset-min-quantity">
-              <Input
-                id="asset-min-quantity"
-                type="number"
-                min="0"
-                value={minQuantity}
-                onChange={(event) => setMinQuantity(event.target.value)}
-              />
-            </FormField>
-            <FormField label="Unit cost" htmlFor="asset-unit-cost">
-              <Input
-                id="asset-unit-cost"
-                type="number"
-                min="0"
-                step="0.01"
-                value={unitCost}
-                onChange={(event) => setUnitCost(event.target.value)}
-              />
-            </FormField>
-          </div>
-          <FormField label="Supplier" htmlFor="asset-supplier">
-            <Input
-              id="asset-supplier"
-              value={supplier}
-              onChange={(event) => setSupplier(event.target.value)}
-            />
-          </FormField>
-          <FormField label="Location" htmlFor="asset-location">
-            <Input
-              id="asset-location"
-              value={location}
-              onChange={(event) => setLocation(event.target.value)}
-            />
-          </FormField>
+            ))
+          ) : (
+            <p className="text-sm text-slate-500 dark:text-slate-400">No schema fields for this type yet.</p>
+          )}
           <FormField label="Description" htmlFor="asset-description">
             <Textarea
               id="asset-description"
@@ -603,7 +729,7 @@ function AssetFormDialog({
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
               Cancel
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || typesLoading || !objectTypeId || Boolean(typesError)}>
               {saving ? 'Saving…' : 'Save'}
             </Button>
           </div>
@@ -648,7 +774,7 @@ function DeleteAssetDialog({
     >
       <Card role="dialog" aria-labelledby="delete-asset-title" className="w-full max-w-md p-6">
         <h2 id="delete-asset-title" className="text-lg font-semibold">
-          Delete product?
+          Delete asset?
         </h2>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
           “{asset.name}” will be removed from your list. This cannot be undone.
@@ -664,6 +790,65 @@ function DeleteAssetDialog({
         </div>
       </Card>
     </div>
+  )
+}
+
+function SchemaAttributeField({
+  attribute,
+  value,
+  onChange,
+}: {
+  attribute: ObjectTypeAttribute
+  value: string | boolean | undefined
+  onChange: (value: string | boolean) => void
+}) {
+  const fieldId = `asset-${attribute.name.replace(/_/g, '-')}`
+  const numberMin =
+    attribute.dataType === 'number' && ['quantity', 'min_quantity', 'unit_cost', 'capacity'].includes(attribute.name)
+      ? '0'
+      : undefined
+  if (attribute.dataType === 'boolean') {
+    return (
+      <FormField label={attribute.label} htmlFor={fieldId} required={attribute.required}>
+        <label className="flex items-center gap-2 text-sm" htmlFor={fieldId}>
+          <input
+            id={fieldId}
+            type="checkbox"
+            checked={value === true}
+            onChange={(event) => onChange(event.target.checked)}
+          />
+          <span>Yes</span>
+        </label>
+      </FormField>
+    )
+  }
+
+  if (attribute.dataType === 'text') {
+    return (
+      <FormField label={attribute.label} htmlFor={fieldId} required={attribute.required}>
+        <Textarea
+          id={fieldId}
+          value={typeof value === 'string' ? value : ''}
+          onChange={(event) => onChange(event.target.value)}
+          required={attribute.required}
+          rows={3}
+        />
+      </FormField>
+    )
+  }
+
+  return (
+    <FormField label={attribute.label} htmlFor={fieldId} required={attribute.required}>
+      <Input
+        id={fieldId}
+        type={attribute.dataType === 'number' ? 'number' : 'text'}
+        min={numberMin}
+        step={attribute.name === 'unit_cost' || attribute.name === 'temperature' ? '0.01' : undefined}
+        value={typeof value === 'string' ? value : ''}
+        onChange={(event) => onChange(event.target.value)}
+        required={attribute.required}
+      />
+    </FormField>
   )
 }
 

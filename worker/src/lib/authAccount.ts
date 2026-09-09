@@ -251,6 +251,9 @@ export async function registerAccount(env: Env, input: RegisterInput): Promise<A
     })
     if (roleError) throw roleError
 
+    const { ensureWorkspaceObjectTypes } = await import('./objectTypes')
+    await ensureWorkspaceObjectTypes(admin, workspace.workspace_id)
+
     return mapAccount(
       {
         id: userId,

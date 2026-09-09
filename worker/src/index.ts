@@ -22,6 +22,12 @@ import {
   selectVertical,
 } from './lib/store'
 import { AssetsHttpError, createWorkspaceAsset, deleteWorkspaceAsset, getWorkspaceAsset, listWorkspaceAssets, updateWorkspaceAsset } from './lib/assets'
+import {
+  createWorkspaceObjectType,
+  listWorkspaceObjectTypes,
+  ObjectTypesHttpError,
+  updateWorkspaceObjectType,
+} from './lib/objectTypes'
 import { isValidVerticalId, resolveUserVertical, saveTenantVertical } from './lib/tenantVertical'
 import {
   AI_FORMS,
@@ -376,6 +382,58 @@ app.patch('/api/service-requests/:id', requireAuth, async (c) => {
   return c.json({ serviceRequest: requests[index] })
 })
 
+function handleDomainError(error: unknown) {
+  if (error instanceof AssetsHttpError || error instanceof ObjectTypesHttpError) {
+    return { error: error.message, status: error.status as 400 | 404 | 409 | 500 | 503 }
+  }
+  return null
+}
+
+// ── Object types ──────────────────────────────────────────────────────────────
+
+app.get('/api/object-types', requireAuth, async (c) => {
+  try {
+    const objectTypes = await listWorkspaceObjectTypes(c.env, c.get('user').userId)
+    return c.json({ objectTypes })
+  } catch (error) {
+    const handled = handleDomainError(error)
+    if (handled) return c.json({ error: handled.error }, handled.status)
+    throw error
+  }
+})
+
+app.post('/api/object-types', requireAuth, async (c) => {
+  try {
+    const body = await c.req.json<Record<string, unknown>>()
+    const objectType = await createWorkspaceObjectType(c.env, c.get('user').userId, {
+      name: String(body.name ?? ''),
+      description: typeof body.description === 'string' ? body.description : null,
+      isActive: typeof body.isActive === 'boolean' ? body.isActive : undefined,
+    })
+    return c.json({ objectType }, 201)
+  } catch (error) {
+    const handled = handleDomainError(error)
+    if (handled) return c.json({ error: handled.error }, handled.status)
+    throw error
+  }
+})
+
+app.patch('/api/object-types/:id', requireAuth, async (c) => {
+  try {
+    const body = await c.req.json<Record<string, unknown>>()
+    const objectType = await updateWorkspaceObjectType(c.env, c.get('user').userId, c.req.param('id'), {
+      name: typeof body.name === 'string' ? body.name : undefined,
+      description: body.description === undefined ? undefined : typeof body.description === 'string' ? body.description : null,
+      isActive: typeof body.isActive === 'boolean' ? body.isActive : undefined,
+    })
+    return c.json({ objectType })
+  } catch (error) {
+    const handled = handleDomainError(error)
+    if (handled) return c.json({ error: handled.error }, handled.status)
+    throw error
+  }
+})
+
 // ── Assets ────────────────────────────────────────────────────────────────────
 
 app.get('/api/assets', requireAuth, async (c) => {
@@ -383,7 +441,8 @@ app.get('/api/assets', requireAuth, async (c) => {
     const assets = await listWorkspaceAssets(c.env, c.get('user').userId)
     return c.json(assets.filter((a) => a.is_active))
   } catch (error) {
-    if (error instanceof AssetsHttpError) return c.json({ error: error.message }, error.status)
+    const handled = handleDomainError(error)
+    if (handled) return c.json({ error: handled.error }, handled.status)
     throw error
   }
 })
@@ -394,23 +453,30 @@ app.get('/api/assets/:id', requireAuth, async (c) => {
     if (!asset || !asset.is_active) return c.json({ error: 'Asset not found' }, 404)
     return c.json(asset)
   } catch (error) {
-    if (error instanceof AssetsHttpError) return c.json({ error: error.message }, error.status)
+    const handled = handleDomainError(error)
+    if (handled) return c.json({ error: handled.error }, handled.status)
     throw error
   }
 })
 
 function assetInputFromBody(body: Record<string, unknown>) {
+  const objectTypeIdRaw = body.objectTypeId ?? body.object_type_id
+  const customFieldsRaw = body.customFields ?? body.custom_fields
   return {
     name: String(body.name ?? ''),
+    objectTypeId: typeof objectTypeIdRaw === 'string' && objectTypeIdRaw.trim() ? objectTypeIdRaw.trim() : null,
     category: typeof body.category === 'string' ? body.category : null,
     sku: typeof body.sku === 'string' ? body.sku : null,
-    quantity: body.quantity == null || body.quantity === '' ? 0 : Number(body.quantity),
-    minQuantity: body.minQuantity == null || body.minQuantity === '' ? 0 : Number(body.minQuantity),
+    quantity: body.quantity == null || body.quantity === '' ? undefined : Number(body.quantity),
+    minQuantity: body.minQuantity == null || body.minQuantity === '' ? undefined : Number(body.minQuantity),
     unitCost: body.unitCost == null || body.unitCost === '' ? null : Number(body.unitCost),
     supplier: typeof body.supplier === 'string' ? body.supplier : null,
     location: typeof body.location === 'string' ? body.location : null,
     description: typeof body.description === 'string' ? body.description : null,
     avatar: typeof body.avatar === 'string' ? body.avatar : null,
+    customFields: customFieldsRaw && typeof customFieldsRaw === 'object' && !Array.isArray(customFieldsRaw)
+      ? (customFieldsRaw as Record<string, unknown>)
+      : null,
   }
 }
 
@@ -420,7 +486,8 @@ app.post('/api/assets', requireAuth, async (c) => {
     const asset = await createWorkspaceAsset(c.env, c.get('user').userId, assetInputFromBody(body))
     return c.json(asset, 201)
   } catch (error) {
-    if (error instanceof AssetsHttpError) return c.json({ error: error.message }, error.status)
+    const handled = handleDomainError(error)
+    if (handled) return c.json({ error: handled.error }, handled.status)
     throw error
   }
 })
@@ -431,7 +498,8 @@ app.put('/api/assets/:id', requireAuth, async (c) => {
     const asset = await updateWorkspaceAsset(c.env, c.get('user').userId, c.req.param('id'), assetInputFromBody(body))
     return c.json(asset)
   } catch (error) {
-    if (error instanceof AssetsHttpError) return c.json({ error: error.message }, error.status)
+    const handled = handleDomainError(error)
+    if (handled) return c.json({ error: handled.error }, handled.status)
     throw error
   }
 })
@@ -441,7 +509,8 @@ app.delete('/api/assets/:id', requireAuth, async (c) => {
     await deleteWorkspaceAsset(c.env, c.get('user').userId, c.req.param('id'))
     return c.json({ success: true })
   } catch (error) {
-    if (error instanceof AssetsHttpError) return c.json({ error: error.message }, error.status)
+    const handled = handleDomainError(error)
+    if (handled) return c.json({ error: handled.error }, handled.status)
     throw error
   }
 })

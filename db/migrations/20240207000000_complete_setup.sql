@@ -323,19 +323,18 @@ WHERE t.name = 'Default Tenant'
       WHERE s.workspace_id = w.workspace_id AND s.name = 'default'
   );
 
-INSERT INTO object_types (schema_id, name, description, is_system, schema_definition)
-SELECT s.schema_id, v.type_name, 'System type for ' || v.type_name, true, '{}'::jsonb
+INSERT INTO object_types (schema_id, name, description, is_system, is_active, schema_definition)
+SELECT s.schema_id, v.type_name, v.type_description, false, true, '{}'::jsonb
 FROM schemas s
 JOIN workspaces w ON w.workspace_id = s.workspace_id
 JOIN tenants t ON t.tenant_id = w.tenant_id
 CROSS JOIN (
     VALUES
-        ('asset'),
-        ('location'),
-        ('supplier'),
-        ('equipment'),
-        ('inventory_item')
-) AS v(type_name)
+        ('Freezer', 'Cold storage equipment and freezer units.'),
+        ('Product', 'Sellable or stocked products.'),
+        ('Equipment', 'Tools, appliances, and operational equipment.'),
+        ('Ingredient', 'Raw ingredients and consumable supplies.')
+) AS v(type_name, type_description)
 WHERE t.name = 'Default Tenant'
   AND w.name = 'Default Workspace'
   AND s.name = 'default'
@@ -420,8 +419,7 @@ WITH inventory AS (
         o.updated_at
     FROM objects o
     JOIN object_types ot ON o.object_type_id = ot.object_type_id
-    WHERE (ot.name = 'inventory_item' OR ot.name = 'asset')
-      AND o.is_deleted = false
+    WHERE o.is_deleted = false
 )
 SELECT
     object_id,

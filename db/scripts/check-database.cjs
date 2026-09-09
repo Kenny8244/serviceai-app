@@ -18,6 +18,7 @@ const CORE_TABLES = [
     'workspaces',
     'schemas',
     'object_types',
+    'object_type_attributes',
     'objects',
     'profiles',
     'user_workspace_roles',
@@ -28,7 +29,14 @@ const CORE_TABLES = [
     'audit_logs',
 ];
 
-const EXPECTED_OBJECT_TYPES = ['asset', 'location', 'supplier', 'equipment', 'inventory_item'];
+const EXPECTED_OBJECT_TYPES = ['Freezer', 'Product', 'Equipment', 'Ingredient'];
+
+const EXPECTED_ATTRIBUTES = {
+    Product: ['sku', 'quantity', 'min_quantity', 'unit_cost', 'supplier', 'location'],
+    Ingredient: ['quantity', 'unit', 'min_quantity', 'location', 'perishable'],
+    Equipment: ['location', 'supplier', 'serial_number'],
+    Freezer: ['location', 'temperature', 'capacity'],
+};
 
 async function checkDatabase() {
     console.log('Checking database status...\n');
@@ -43,7 +51,7 @@ async function checkDatabase() {
 
     console.log('Core tables:');
     for (const table of CORE_TABLES) {
-        const { error } = await supabase.from(table).select('*', { head: true, count: 'exact' });
+        const { error } = await supabase.from(table).select('*').limit(1);
         if (error) {
             failed = true;
             console.log(`   FAIL ${table}: ${error.message}`);
@@ -101,10 +109,43 @@ async function checkDatabase() {
             const names = (data || []).map((row) => row.name);
             EXPECTED_OBJECT_TYPES.forEach((name) => {
                 if (names.includes(name)) {
-                    console.log(`   OK   ${name} (system)`);
+                    console.log(`   OK   ${name}`);
                 } else {
                     failed = true;
-                    console.log(`   FAIL missing system type: ${name}`);
+                    console.log(`   FAIL missing object type: ${name}`);
+                }
+            });
+        }
+    }
+
+    console.log('\nObject type attributes (SCRUM-34):');
+    {
+        const types = await supabase.from('object_types').select('object_type_id, name');
+        const attrs = await supabase.from('object_type_attributes').select('object_type_id, name');
+        if (attrs.error) {
+            failed = true;
+            console.log(`   FAIL ${attrs.error.message}`);
+            console.log('         Apply db/migrations/20260909120000_scrum34_object_type_attributes.sql');
+        } else if (types.error) {
+            failed = true;
+            console.log(`   FAIL ${types.error.message}`);
+        } else {
+            const typeNames = new Map((types.data || []).map((row) => [row.object_type_id, row.name]));
+            const byType = {};
+            (attrs.data || []).forEach((row) => {
+                const typeName = typeNames.get(row.object_type_id);
+                if (!typeName) return;
+                if (!byType[typeName]) byType[typeName] = [];
+                byType[typeName].push(row.name);
+            });
+            Object.entries(EXPECTED_ATTRIBUTES).forEach(([typeName, expected]) => {
+                const names = byType[typeName] || [];
+                const missing = expected.filter((name) => !names.includes(name));
+                if (missing.length === 0) {
+                    console.log(`   OK   ${typeName}: ${expected.join(', ')}`);
+                } else {
+                    failed = true;
+                    console.log(`   FAIL ${typeName} missing attributes: ${missing.join(', ')}`);
                 }
             });
         }
@@ -172,7 +213,9 @@ async function checkDatabase() {
 
     if (failed) {
         console.log('\nDatabase check failed. Apply db/migrations/20240207000000_complete_setup.sql');
-        console.log('then db/migrations/20260902000000_auth_profile_fields.sql in the SQL Editor.');
+        console.log('then db/migrations/20260902000000_auth_profile_fields.sql');
+        console.log('then db/migrations/20260909000000_scrum33_object_type_seed.sql');
+        console.log('then db/migrations/20260909120000_scrum34_object_type_attributes.sql in the SQL Editor.');
         process.exit(1);
     }
 

@@ -1,9 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Asset, Env } from '../types'
 import { getWorkspaceIdForProfile } from './authAccount'
+import {
+  defaultObjectTypeId,
+  ensureWorkspaceObjectTypes,
+  findWorkspaceObjectType,
+  listWorkspaceObjectTypes,
+  ObjectTypesHttpError,
+} from './objectTypes'
 import { getSupabaseAdmin } from './supabase'
-
-const ASSET_OBJECT_TYPES = ['asset', 'inventory_item'] as const
 
 const OBJECT_COLUMNS =
   'object_id, name, status, custom_fields, created_at, updated_at, is_deleted, object_type_id, object_types(name)'
@@ -19,6 +24,7 @@ export class AssetsHttpError extends Error {
 
 export type CreateAssetInput = {
   name: string
+  objectTypeId?: string | null
   category?: string | null
   sku?: string | null
   quantity?: number
@@ -28,6 +34,7 @@ export type CreateAssetInput = {
   location?: string | null
   description?: string | null
   avatar?: string | null
+  customFields?: Record<string, unknown> | null
 }
 
 type ObjectTypeRel = { name?: string | null } | { name?: string | null }[] | null
@@ -95,17 +102,112 @@ function asAvatar(value: unknown): string | null {
   return trimmed && AVATAR_DATA_URL.test(trimmed) ? trimmed : null
 }
 
-function customFieldsFromInput(input: CreateAssetInput): Record<string, unknown> {
-  return {
-    category: input.category?.trim() || null,
-    sku: input.sku?.trim() || null,
-    quantity: Number.isFinite(input.quantity) ? Number(input.quantity) : 0,
-    min_quantity: Number.isFinite(input.minQuantity) ? Number(input.minQuantity) : 0,
-    unit_cost: Number.isFinite(input.unitCost) ? Number(input.unitCost) : null,
-    supplier: input.supplier?.trim() || null,
-    location: input.location?.trim() || null,
-    description: input.description?.trim() || null,
-    avatar: avatarFromInput(input),
+const CORE_CUSTOM_KEYS = new Set(['description', 'avatar', 'category', 'tags'])
+
+function sanitizeCustomFieldBag(raw: Record<string, unknown>): Record<string, unknown> {
+  const fields: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(raw)) {
+    if (!key || key === 'avatar' || key === 'tags') continue
+    if (typeof value === 'boolean') {
+      fields[key] = value
+    } else if (typeof value === 'number' && Number.isFinite(value)) {
+      fields[key] = value
+    } else if (typeof value === 'string') {
+      fields[key] = value.trim() || null
+    } else if (value == null) {
+      fields[key] = null
+    }
+  }
+  return fields
+}
+
+function coerceSchemaValue(dataType: string, value: unknown): unknown {
+  if (dataType === 'boolean') {
+    if (value === true || value === false) return value
+    if (value === 'true') return true
+    if (value === 'false') return false
+    return null
+  }
+  if (dataType === 'number') return asNumber(value)
+  return asString(value)
+}
+
+function legacyInputValue(input: CreateAssetInput, name: string): unknown {
+  switch (name) {
+    case 'sku':
+      return input.sku
+    case 'quantity':
+      return input.quantity
+    case 'min_quantity':
+      return input.minQuantity
+    case 'unit_cost':
+      return input.unitCost
+    case 'supplier':
+      return input.supplier
+    case 'location':
+      return input.location
+    case 'category':
+      return input.category
+    case 'description':
+      return input.description
+    default:
+      return undefined
+  }
+}
+
+function customFieldsFromInput(
+  input: CreateAssetInput,
+  attributes: { name: string; dataType: string }[] = [],
+  existing?: Record<string, unknown> | null
+): Record<string, unknown> {
+  const extras = sanitizeCustomFieldBag(asRecord(input.customFields))
+  const previous = asRecord(existing)
+  const fields: Record<string, unknown> = {}
+  const tags = asTags(previous.tags)
+  if (tags) fields.tags = tags
+
+  fields.description = asString(input.description) ?? asString(extras.description) ?? asString(previous.description)
+  fields.avatar = input.avatar === undefined ? asAvatar(previous.avatar) : avatarFromInput(input)
+  fields.category = asString(input.category) ?? asString(extras.category) ?? asString(previous.category)
+
+  if (attributes.length > 0) {
+    for (const attribute of attributes) {
+      if (CORE_CUSTOM_KEYS.has(attribute.name)) continue
+      const fromExtras = Object.prototype.hasOwnProperty.call(extras, attribute.name)
+      const raw = fromExtras ? extras[attribute.name] : legacyInputValue(input, attribute.name)
+      fields[attribute.name] = coerceSchemaValue(attribute.dataType, raw)
+    }
+    return fields
+  }
+
+  for (const [key, value] of Object.entries(extras)) {
+    fields[key] = value
+  }
+  return fields
+}
+
+function assertRequiredAttributes(
+  attributes: { name: string; label: string; dataType: string; required: boolean }[],
+  fields: Record<string, unknown>
+): void {
+  for (const attribute of attributes) {
+    if (!attribute.required) continue
+    const value = fields[attribute.name]
+    if (attribute.dataType === 'boolean') {
+      if (value !== true && value !== false) {
+        throw new AssetsHttpError(`${attribute.label} is required.`, 400)
+      }
+      continue
+    }
+    if (attribute.dataType === 'number') {
+      if (asNumber(value) == null) {
+        throw new AssetsHttpError(`${attribute.label} is required.`, 400)
+      }
+      continue
+    }
+    if (asString(value) == null) {
+      throw new AssetsHttpError(`${attribute.label} is required.`, 400)
+    }
   }
 }
 
@@ -126,6 +228,8 @@ export function mapObjectToAsset(row: ObjectRow, userId: string): Asset {
     name: row.name || 'Untitled',
     description: asString(fields.description),
     category,
+    object_type_id: row.object_type_id,
+    object_type_name: typeName,
     sku: asString(fields.sku),
     quantity: asNumber(fields.quantity) ?? 0,
     min_quantity: asNumber(fields.min_quantity) ?? asNumber(fields.minQuantity) ?? 0,
@@ -134,38 +238,19 @@ export function mapObjectToAsset(row: ObjectRow, userId: string): Asset {
     location: asString(fields.location),
     tags: asTags(fields.tags),
     avatar: asAvatar(fields.avatar),
+    custom_fields: fields,
     is_active: row.status === 'active',
     created_at: row.created_at,
     updated_at: row.updated_at,
   }
 }
 
-async function assetTypeIdsForWorkspace(admin: SupabaseClient, workspaceId: string): Promise<string[]> {
-  const { data: schemas, error: schemaError } = await admin
-    .from('schemas')
-    .select('schema_id')
-    .eq('workspace_id', workspaceId)
-
-  if (schemaError) {
-    console.error('Failed to load workspace schemas:', schemaError.message)
-    throw new AssetsHttpError('Could not load assets.', 500)
+function asCatalogError(error: unknown): never {
+  if (error instanceof ObjectTypesHttpError) {
+    const status = error.status === 409 ? 400 : error.status
+    throw new AssetsHttpError(error.message, status)
   }
-
-  const schemaIds = (schemas ?? []).map((schema) => schema.schema_id as string).filter(Boolean)
-  if (schemaIds.length === 0) return []
-
-  const { data: types, error: typeError } = await admin
-    .from('object_types')
-    .select('object_type_id')
-    .in('schema_id', schemaIds)
-    .in('name', [...ASSET_OBJECT_TYPES])
-
-  if (typeError) {
-    console.error('Failed to load asset object types:', typeError.message)
-    throw new AssetsHttpError('Could not load assets.', 500)
-  }
-
-  return (types ?? []).map((type) => type.object_type_id as string).filter(Boolean)
+  throw error
 }
 
 async function loadWorkspaceContext(
@@ -182,15 +267,11 @@ export async function listWorkspaceAssets(env: Env, userId: string): Promise<Ass
   const context = await loadWorkspaceContext(env, userId)
   if (!context) return []
 
-  const typeIds = await assetTypeIdsForWorkspace(context.admin, context.workspaceId)
-  if (typeIds.length === 0) return []
-
   const { data, error } = await context.admin
     .from('objects')
     .select(OBJECT_COLUMNS)
     .eq('workspace_id', context.workspaceId)
     .eq('is_deleted', false)
-    .in('object_type_id', typeIds)
     .order('updated_at', { ascending: false })
 
   if (error) {
@@ -204,9 +285,6 @@ export async function listWorkspaceAssets(env: Env, userId: string): Promise<Ass
 export async function getWorkspaceAsset(env: Env, userId: string, assetId: string): Promise<Asset | null> {
   const context = await loadWorkspaceContext(env, userId)
   if (!context) return null
-
-  const typeIds = await assetTypeIdsForWorkspace(context.admin, context.workspaceId)
-  if (typeIds.length === 0) return null
 
   const { data, error } = await context.admin
     .from('objects')
@@ -222,71 +300,46 @@ export async function getWorkspaceAsset(env: Env, userId: string, assetId: strin
   }
 
   if (!data) return null
-  const row = data as ObjectRow
-  if (!typeIds.includes(row.object_type_id)) return null
-  return mapObjectToAsset(row, userId)
+  return mapObjectToAsset(data as ObjectRow, userId)
 }
 
-async function ensureInventoryTypeId(admin: SupabaseClient, workspaceId: string): Promise<string> {
-  const { data: schemas, error: schemaError } = await admin
-    .from('schemas')
-    .select('schema_id')
-    .eq('workspace_id', workspaceId)
-
-  if (schemaError) {
-    console.error('Failed to load workspace schemas:', schemaError.message)
-    throw new AssetsHttpError('Could not create asset.', 500)
+async function resolveObjectTypeId(
+  env: Env,
+  userId: string,
+  admin: SupabaseClient,
+  workspaceId: string,
+  requestedId?: string | null,
+  allowInactiveId?: string | null
+): Promise<string> {
+  try {
+    await ensureWorkspaceObjectTypes(admin, workspaceId)
+  } catch (error) {
+    asCatalogError(error)
   }
 
-  let schemaId = (schemas ?? [])[0]?.schema_id as string | undefined
-  if (!schemaId) {
-    const inserted = await admin
-      .from('schemas')
-      .insert({
-        workspace_id: workspaceId,
-        name: 'default',
-        description: 'Default schema for asset management',
-      })
-      .select('schema_id')
-      .single()
-    if (inserted.error || !inserted.data) {
-      console.error('Failed to create workspace schema:', inserted.error?.message)
-      throw new AssetsHttpError('Could not create asset.', 500)
+  if (requestedId) {
+    let type
+    try {
+      type = await findWorkspaceObjectType(admin, workspaceId, requestedId)
+    } catch (error) {
+      asCatalogError(error)
     }
-    schemaId = inserted.data.schema_id as string
+    if (!type) throw new AssetsHttpError('Object type not found.', 400)
+    if (!type.isActive && type.id !== allowInactiveId) {
+      throw new AssetsHttpError('Object type is not active.', 400)
+    }
+    return type.id
   }
 
-  const { data: types, error: typeError } = await admin
-    .from('object_types')
-    .select('object_type_id, name')
-    .eq('schema_id', schemaId)
-    .in('name', [...ASSET_OBJECT_TYPES])
-
-  if (typeError) {
-    console.error('Failed to load asset object types:', typeError.message)
-    throw new AssetsHttpError('Could not create asset.', 500)
+  let types
+  try {
+    types = await listWorkspaceObjectTypes(env, userId)
+  } catch (error) {
+    asCatalogError(error)
   }
-
-  const inventory = types?.find((row) => row.name === 'inventory_item')
-  const existingId = (inventory?.object_type_id || types?.[0]?.object_type_id) as string | undefined
-  if (existingId) return existingId
-
-  const inserted = await admin
-    .from('object_types')
-    .insert({
-      schema_id: schemaId,
-      name: 'inventory_item',
-      description: 'System type for inventory_item',
-      is_system: true,
-      schema_definition: {},
-    })
-    .select('object_type_id')
-    .single()
-  if (inserted.error || !inserted.data) {
-    console.error('Failed to create object type:', inserted.error?.message)
-    throw new AssetsHttpError('Could not create asset.', 500)
-  }
-  return inserted.data.object_type_id as string
+  const fallbackId = defaultObjectTypeId(types)
+  if (!fallbackId) throw new AssetsHttpError('No object types available.', 400)
+  return fallbackId
 }
 
 export async function createWorkspaceAsset(env: Env, userId: string, input: CreateAssetInput): Promise<Asset> {
@@ -300,7 +353,16 @@ export async function createWorkspaceAsset(env: Env, userId: string, input: Crea
     throw new AssetsHttpError('Name is required.', 400)
   }
 
-  const typeId = await ensureInventoryTypeId(context.admin, context.workspaceId)
+  const typeId = await resolveObjectTypeId(
+    env,
+    userId,
+    context.admin,
+    context.workspaceId,
+    input.objectTypeId
+  )
+  const type = await findWorkspaceObjectType(context.admin, context.workspaceId, typeId)
+  const fields = customFieldsFromInput(input, type?.attributes ?? [])
+  if (type) assertRequiredAttributes(type.attributes, fields)
   const { data, error } = await context.admin
     .from('objects')
     .insert({
@@ -308,7 +370,7 @@ export async function createWorkspaceAsset(env: Env, userId: string, input: Crea
       workspace_id: context.workspaceId,
       name,
       status: 'active',
-      custom_fields: customFieldsFromInput(input),
+      custom_fields: fields,
       is_deleted: false,
       created_by: userId,
       updated_by: userId,
@@ -345,11 +407,26 @@ export async function updateWorkspaceAsset(
     throw new AssetsHttpError('Name is required.', 400)
   }
 
+  const nextTypeId = input.objectTypeId
+    ? await resolveObjectTypeId(
+        env,
+        userId,
+        context.admin,
+        context.workspaceId,
+        input.objectTypeId,
+        existing.object_type_id
+      )
+    : existing.object_type_id
+  const type = await findWorkspaceObjectType(context.admin, context.workspaceId, nextTypeId)
+  const fields = customFieldsFromInput(input, type?.attributes ?? [], existing.custom_fields)
+  if (type) assertRequiredAttributes(type.attributes, fields)
+
   const { data, error } = await context.admin
     .from('objects')
     .update({
       name,
-      custom_fields: customFieldsFromInput(input),
+      object_type_id: nextTypeId,
+      custom_fields: fields,
       updated_by: userId,
       updated_at: new Date().toISOString(),
     })

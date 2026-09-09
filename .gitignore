@@ -75,3 +75,7 @@ $RECYCLE.BIN/
 AGENTS.md
 .cursor/skills/
 
+db/migrations/20240207000000_complete_setup.sql
+db/migrations/20240207000000_complete_setup.sql
+db/migrations/20260909000000_scrum33_object_type_seed.sql
+db/migrations/20260909120000_scrum34_object_type_attributes.sql

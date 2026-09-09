@@ -119,6 +119,8 @@ export interface Asset {
   name: string
   description: string | null
   category: string
+  objectTypeId: string
+  objectTypeName: string
   sku: string | null
   quantity: number
   minQuantity: number
@@ -127,9 +129,31 @@ export interface Asset {
   location: string | null
   tags: string[] | null
   avatar: string | null
+  customFields: Record<string, unknown>
   isActive: boolean
   createdAt: string
   updatedAt: string
+}
+
+export type ObjectTypeAttributeDataType = 'string' | 'number' | 'boolean' | 'text'
+
+export interface ObjectTypeAttribute {
+  id: string
+  name: string
+  label: string
+  dataType: ObjectTypeAttributeDataType
+  required: boolean
+  order: number
+}
+
+export interface ObjectType {
+  id: string
+  name: string
+  description: string | null
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+  attributes: ObjectTypeAttribute[]
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -165,23 +189,83 @@ function normalizeServiceRequest(rawValue: unknown): ServiceRequest {
 function normalizeAsset(rawValue: unknown): Asset {
   const raw = asRecord(rawValue)
   const unitCost = pickRaw(raw, 'unitCost', 'unit_cost')
+  const customFieldsRaw = pickRaw(raw, 'customFields', 'custom_fields')
+  const customFields = asRecord(customFieldsRaw)
+  const sku = (pickRaw(raw, 'sku') as string | null) ?? (typeof customFields.sku === 'string' ? customFields.sku : null)
+  const location =
+    (pickRaw(raw, 'location') as string | null) ?? (typeof customFields.location === 'string' ? customFields.location : null)
   return {
     id: String(raw.id ?? ''),
     name: String(raw.name ?? 'Untitled'),
-    description: (pickRaw(raw, 'description') as string | null) ?? null,
-    category: String(raw.category ?? 'general'),
-    sku: (pickRaw(raw, 'sku') as string | null) ?? null,
-    quantity: Number(raw.quantity ?? 0),
-    minQuantity: Number(pickRaw(raw, 'minQuantity', 'min_quantity') ?? 0),
-    unitCost: unitCost == null || unitCost === '' ? null : Number(unitCost),
-    supplier: (pickRaw(raw, 'supplier') as string | null) ?? null,
-    location: (pickRaw(raw, 'location') as string | null) ?? null,
+    description: (pickRaw(raw, 'description') as string | null) ?? (typeof customFields.description === 'string' ? customFields.description : null),
+    category: String(raw.category ?? customFields.category ?? 'general'),
+    sku,
+    quantity: Number(raw.quantity ?? customFields.quantity ?? 0),
+    minQuantity: Number(pickRaw(raw, 'minQuantity', 'min_quantity') ?? customFields.min_quantity ?? 0),
+    unitCost: unitCost == null || unitCost === ''
+      ? customFields.unit_cost == null || customFields.unit_cost === ''
+        ? null
+        : Number(customFields.unit_cost)
+      : Number(unitCost),
+    supplier: (pickRaw(raw, 'supplier') as string | null) ?? (typeof customFields.supplier === 'string' ? customFields.supplier : null),
+    location,
     tags: Array.isArray(raw.tags) ? (raw.tags as string[]) : null,
     avatar: (pickRaw(raw, 'avatar') as string | null) ?? null,
+    customFields,
+    objectTypeId: String(pickRaw(raw, 'objectTypeId', 'object_type_id') ?? ''),
+    objectTypeName: String(pickRaw(raw, 'objectTypeName', 'object_type_name') ?? ''),
     isActive: pickRaw(raw, 'isActive', 'is_active') !== false,
     createdAt: String(pickRaw(raw, 'createdAt', 'created_at') ?? ''),
     updatedAt: String(pickRaw(raw, 'updatedAt', 'updated_at') ?? ''),
   }
+}
+
+function asAttributeDataType(value: unknown): ObjectTypeAttributeDataType {
+  const raw = String(value ?? 'string')
+  if (raw === 'number' || raw === 'boolean' || raw === 'text' || raw === 'string') return raw
+  return 'string'
+}
+
+function normalizeObjectTypeAttribute(rawValue: unknown): ObjectTypeAttribute | null {
+  const raw = asRecord(rawValue)
+  const name = String(raw.name ?? '').trim()
+  const id = String(pickRaw(raw, 'id', 'attributeId', 'attribute_id') ?? '')
+  if (!id && !name) return null
+  const order = Number(pickRaw(raw, 'order', 'sortOrder', 'sort_order') ?? 0)
+  return {
+    id,
+    name,
+    label: String(raw.label ?? name),
+    dataType: asAttributeDataType(pickRaw(raw, 'dataType', 'data_type')),
+    required: pickRaw(raw, 'required', 'isRequired', 'is_required') === true,
+    order: Number.isFinite(order) ? order : 0,
+  }
+}
+
+function normalizeObjectType(rawValue: unknown): ObjectType {
+  const raw = asRecord(rawValue)
+  const attributesRaw = pickRaw(raw, 'attributes')
+  const attributes = Array.isArray(attributesRaw)
+    ? attributesRaw
+        .map(normalizeObjectTypeAttribute)
+        .filter((item): item is ObjectTypeAttribute => item != null)
+        .sort((left, right) => left.order - right.order || left.name.localeCompare(right.name))
+    : []
+  return {
+    id: String(pickRaw(raw, 'id', 'objectTypeId', 'object_type_id') ?? ''),
+    name: String(raw.name ?? ''),
+    description: (pickRaw(raw, 'description') as string | null) ?? null,
+    isActive: pickRaw(raw, 'isActive', 'is_active') !== false,
+    createdAt: String(pickRaw(raw, 'createdAt', 'created_at') ?? ''),
+    updatedAt: String(pickRaw(raw, 'updatedAt', 'updated_at') ?? ''),
+    attributes,
+  }
+}
+
+function asObjectTypeList(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data
+  const objectTypes = asRecord(data).objectTypes
+  return Array.isArray(objectTypes) ? objectTypes : []
 }
 
 function asAssetList(data: unknown): unknown[] {
@@ -602,6 +686,7 @@ class ApiService {
 
   async createAsset(assetData: {
     name: string
+    objectTypeId?: string
     category?: string
     sku?: string
     quantity?: number
@@ -611,6 +696,7 @@ class ApiService {
     location?: string
     description?: string
     avatar?: string | null
+    customFields?: Record<string, unknown>
   }): Promise<Asset> {
     const response = await fetch(`${API_BASE_URL}/assets`, {
       method: 'POST',
@@ -625,6 +711,7 @@ class ApiService {
     assetId: string,
     updates: {
       name: string
+      objectTypeId?: string
       category?: string
       sku?: string
       quantity?: number
@@ -634,6 +721,7 @@ class ApiService {
       location?: string
       description?: string
       avatar?: string | null
+      customFields?: Record<string, unknown>
     }
   ): Promise<Asset> {
     const response = await fetch(`${API_BASE_URL}/assets/${assetId}`, {
@@ -651,6 +739,15 @@ class ApiService {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
+  }
+
+  async getObjectTypes(): Promise<ObjectType[]> {
+    const response = await fetch(`${API_BASE_URL}/object-types`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    })
+    const data = await this.handleResponse<unknown>(response)
+    return asObjectTypeList(data).map(normalizeObjectType)
   }
 
   async getAssetTransactions(assetId: string, page: number = 1, limit: number = 50) {

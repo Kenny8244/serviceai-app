@@ -55,6 +55,8 @@ export interface Asset {
   name: string
   description?: string | null
   category: string
+  object_type_id: string
+  object_type_name: string
   sku?: string | null
   quantity: number
   min_quantity: number
@@ -63,6 +65,7 @@ export interface Asset {
   location?: string | null
   tags?: string[] | null
   avatar?: string | null
+  custom_fields?: Record<string, unknown>
   metadata?: Record<string, unknown>
   is_active: boolean
   created_at: string

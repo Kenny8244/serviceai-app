@@ -1,13 +1,15 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AssetsPage from '@/pages/AssetsPage'
-import { apiService, type Asset } from '@/services/api'
+import { apiService, type Asset, type ObjectType } from '@/services/api'
 
 const sample: Asset = {
   id: 'obj-1',
   name: 'Walk-in cooler',
   description: null,
   category: 'inventory_item',
+  objectTypeId: 'type-product',
+  objectTypeName: 'Product',
   sku: 'SKU-9',
   quantity: 12,
   minQuantity: 2,
@@ -16,9 +18,122 @@ const sample: Asset = {
   location: 'Kitchen',
   tags: null,
   avatar: null,
+  customFields: {
+    sku: 'SKU-9',
+    quantity: 12,
+    min_quantity: 2,
+    unit_cost: 4.5,
+    location: 'Kitchen',
+  },
   isActive: true,
   createdAt: '2026-09-01T00:00:00.000Z',
   updatedAt: '2026-09-04T00:00:00.000Z',
+}
+
+const objectTypes: ObjectType[] = [
+  {
+    id: 'type-product',
+    name: 'Product',
+    description: 'Sellable or stocked products.',
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-01T00:00:00.000Z',
+    attributes: [
+      { id: 'attr-sku', name: 'sku', label: 'SKU', dataType: 'string', required: false, order: 1 },
+      { id: 'attr-qty', name: 'quantity', label: 'Quantity', dataType: 'number', required: true, order: 2 },
+      { id: 'attr-min', name: 'min_quantity', label: 'Minimum quantity', dataType: 'number', required: false, order: 3 },
+      { id: 'attr-loc', name: 'location', label: 'Location', dataType: 'string', required: false, order: 6 },
+    ],
+  },
+  {
+    id: 'type-freezer',
+    name: 'Freezer',
+    description: 'Cold storage equipment and freezer units.',
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-01T00:00:00.000Z',
+    attributes: [
+      { id: 'attr-floc', name: 'location', label: 'Location', dataType: 'string', required: true, order: 1 },
+      { id: 'attr-temp', name: 'temperature', label: 'Temperature', dataType: 'number', required: false, order: 2 },
+      { id: 'attr-cap', name: 'capacity', label: 'Capacity', dataType: 'number', required: false, order: 3 },
+    ],
+  },
+  {
+    id: 'type-ingredient',
+    name: 'Ingredient',
+    description: 'Raw ingredients and consumable supplies.',
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-01T00:00:00.000Z',
+    attributes: [
+      { id: 'attr-iqty', name: 'quantity', label: 'Quantity', dataType: 'number', required: true, order: 1 },
+      { id: 'attr-unit', name: 'unit', label: 'Unit', dataType: 'string', required: true, order: 2 },
+      { id: 'attr-perish', name: 'perishable', label: 'Perishable', dataType: 'boolean', required: false, order: 5 },
+    ],
+  },
+  {
+    id: 'type-note',
+    name: 'Note',
+    description: 'Freeform notes with a text schema field.',
+    isActive: true,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-01T00:00:00.000Z',
+    attributes: [
+      { id: 'attr-notes', name: 'notes', label: 'Notes', dataType: 'text', required: false, order: 1 },
+    ],
+  },
+]
+
+const ingredient: Asset = {
+  id: 'obj-ing',
+  name: 'Flour 00',
+  description: null,
+  category: 'Ingredient',
+  objectTypeId: 'type-ingredient',
+  objectTypeName: 'Ingredient',
+  sku: null,
+  quantity: 5,
+  minQuantity: 0,
+  unitCost: null,
+  supplier: null,
+  location: null,
+  tags: null,
+  avatar: null,
+  customFields: {
+    quantity: 5,
+    unit: 'kg',
+    perishable: true,
+  },
+  isActive: true,
+  createdAt: '2026-09-01T00:00:00.000Z',
+  updatedAt: '2026-09-04T00:00:00.000Z',
+}
+
+const noteAsset: Asset = {
+  id: 'obj-note',
+  name: 'Storage note',
+  description: null,
+  category: 'Note',
+  objectTypeId: 'type-note',
+  objectTypeName: 'Note',
+  sku: null,
+  quantity: 0,
+  minQuantity: 0,
+  unitCost: null,
+  supplier: null,
+  location: null,
+  tags: null,
+  avatar: null,
+  customFields: {
+    notes: 'Keep dry',
+  },
+  isActive: true,
+  createdAt: '2026-09-01T00:00:00.000Z',
+  updatedAt: '2026-09-04T00:00:00.000Z',
+}
+
+function mockObjectTypes() {
+  vi.spyOn(apiService, 'getObjectTypes').mockResolvedValue(objectTypes)
 }
 
 afterEach(() => {
@@ -37,29 +152,48 @@ describe('AssetsPage', () => {
 
   it('opens the add asset form from the header button', async () => {
     vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample])
+    mockObjectTypes()
     render(<AssetsPage />)
 
     await screen.findAllByText('Walk-in cooler')
     fireEvent.click(screen.getAllByRole('button', { name: 'Add Asset' })[0])
 
     expect(await screen.findByRole('dialog', { name: 'Add Asset' })).toBeInTheDocument()
+    expect(await screen.findByLabelText(/object type/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/name/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^sku$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^quantity/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/minimum quantity/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/unit cost/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/supplier/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/description/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/avatar/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Choose image' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+    expect(screen.getByText('Retail example schema')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(/object type/i), { target: { value: 'type-freezer' } })
+    expect(await screen.findByLabelText(/^temperature$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^temperature$/i)).toHaveValue(null)
+    expect(screen.getByLabelText(/^capacity$/i)).toBeInTheDocument()
+    expect(screen.getByText('Restaurant example schema')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/^sku$/i)).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(/object type/i), { target: { value: 'type-ingredient' } })
+    expect(await screen.findByLabelText(/^unit/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^perishable$/i)).toHaveAttribute('type', 'checkbox')
+
+    fireEvent.change(screen.getByLabelText(/object type/i), { target: { value: 'type-note' } })
+    const notesField = await screen.findByLabelText(/^notes$/i)
+    expect(notesField.tagName).toBe('TEXTAREA')
 
     const overlay = screen.getByRole('dialog', { name: 'Add Asset' }).parentElement
-    fireEvent.mouseDown(screen.getByLabelText(/minimum quantity/i))
+    fireEvent.mouseDown(screen.getByLabelText(/^notes$/i))
     fireEvent.click(overlay!)
     expect(screen.getByRole('dialog', { name: 'Add Asset' })).toBeInTheDocument()
   })
 
   it('opens the edit form with the selected asset values', async () => {
     vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample])
+    mockObjectTypes()
     render(<AssetsPage />)
 
     await screen.findAllByText('Walk-in cooler')
@@ -67,9 +201,105 @@ describe('AssetsPage', () => {
 
     expect(await screen.findByRole('dialog', { name: 'Edit Asset' })).toBeInTheDocument()
     expect(screen.getByLabelText(/name/i)).toHaveValue('Walk-in cooler')
-    expect(screen.getByLabelText(/^quantity$/i)).toHaveValue(12)
+    expect(screen.getByLabelText(/object type/i)).toHaveValue('type-product')
+    await waitFor(() => {
+      expect(screen.getByLabelText(/^quantity/i)).toHaveValue(12)
+    })
     expect(screen.getByLabelText(/minimum quantity/i)).toHaveValue(2)
     expect(screen.getByLabelText(/location/i)).toHaveValue('Kitchen')
+  })
+
+  it('reloads boolean and text schema values in the edit form and details', async () => {
+    vi.spyOn(apiService, 'getAssets').mockResolvedValue([ingredient, noteAsset])
+    mockObjectTypes()
+    render(<AssetsPage />)
+
+    await screen.findAllByText('Flour 00')
+    expect(screen.getByText('kg')).toBeInTheDocument()
+    expect(screen.getByText('Yes')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(await screen.findByRole('dialog', { name: 'Edit Asset' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByLabelText(/^unit/i)).toHaveValue('kg')
+    })
+    expect(screen.getByLabelText(/^perishable$/i)).toBeChecked()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    fireEvent.click(screen.getByText('Storage note'))
+    expect(await screen.findByText('Keep dry')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(await screen.findByRole('dialog', { name: 'Edit Asset' })).toBeInTheDocument()
+    const notesField = await screen.findByLabelText(/^notes$/i)
+    expect(notesField.tagName).toBe('TEXTAREA')
+    expect(notesField).toHaveValue('Keep dry')
+  })
+
+  it('does not save when a required schema field is empty', async () => {
+    vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample])
+    mockObjectTypes()
+    const createAsset = vi.spyOn(apiService, 'createAsset').mockResolvedValue(sample)
+    render(<AssetsPage />)
+
+    await screen.findAllByText('Walk-in cooler')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add Asset' })[0])
+    const dialog = await screen.findByRole('dialog', { name: 'Add Asset' })
+    fireEvent.change(await screen.findByLabelText(/object type/i), { target: { value: 'type-freezer' } })
+    await screen.findByLabelText(/^location/i)
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'New freezer' } })
+    fireEvent.submit(dialog.querySelector('form')!)
+
+    expect(await screen.findByText('Location is required.')).toBeInTheDocument()
+    expect(createAsset).not.toHaveBeenCalled()
+  })
+
+  it('does not show stock quantity for types without a quantity field', async () => {
+    const freezer: Asset = {
+      ...sample,
+      id: 'obj-fz',
+      name: 'Walk-in freezer',
+      objectTypeId: 'type-freezer',
+      objectTypeName: 'Freezer',
+      sku: null,
+      quantity: 0,
+      minQuantity: 0,
+      customFields: { location: 'Dock' },
+    }
+    vi.spyOn(apiService, 'getAssets').mockResolvedValue([freezer])
+    mockObjectTypes()
+    render(<AssetsPage />)
+
+    expect((await screen.findAllByText('Walk-in freezer')).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Qty/)).not.toBeInTheDocument()
+    expect(screen.queryByText('OUT')).not.toBeInTheDocument()
+  })
+
+  it('does not copy previous type values when the object type changes', async () => {
+    vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample])
+    mockObjectTypes()
+    render(<AssetsPage />)
+
+    await screen.findAllByText('Walk-in cooler')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    await screen.findByRole('dialog', { name: 'Edit Asset' })
+    fireEvent.change(await screen.findByLabelText(/object type/i), { target: { value: 'type-freezer' } })
+
+    expect(await screen.findByLabelText(/^location/i)).toHaveValue('')
+    expect(screen.getByLabelText(/^temperature/i)).toHaveValue(null)
+  })
+
+  it('shows an error when object types fail to load', async () => {
+    vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample])
+    vi.spyOn(apiService, 'getObjectTypes').mockRejectedValue(
+      Object.assign(new Error('Could not load object types.'), { status: 500 })
+    )
+    render(<AssetsPage />)
+
+    await screen.findAllByText('Walk-in cooler')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add Asset' })[0])
+
+    expect(await screen.findByText('The server had a problem. Please try again in a moment.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
   })
 
   it('renders type, quantity, and updated date on a live row', async () => {
@@ -77,7 +307,7 @@ describe('AssetsPage', () => {
     render(<AssetsPage />)
 
     expect((await screen.findAllByText('Walk-in cooler')).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/inventory_item/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Product/).length).toBeGreaterThan(0)
     expect(screen.getByText(/Qty 12/)).toBeInTheDocument()
     expect(screen.getAllByText(/Updated/).length).toBeGreaterThan(0)
   })
@@ -88,18 +318,18 @@ describe('AssetsPage', () => {
     render(<AssetsPage />)
 
     await screen.findAllByText('Walk-in cooler')
-    fireEvent.click(screen.getByRole('button', { name: /delete product/i }))
+    fireEvent.click(screen.getByRole('button', { name: /delete asset/i }))
 
-    const dialog = await screen.findByRole('dialog', { name: 'Delete product?' })
+    const dialog = await screen.findByRole('dialog', { name: 'Delete asset?' })
     expect(dialog).toHaveTextContent('Walk-in cooler')
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('dialog', { name: 'Delete product?' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Delete asset?' })).not.toBeInTheDocument()
     expect(deleteAsset).not.toHaveBeenCalled()
     expect(screen.getAllByText('Walk-in cooler').length).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByRole('button', { name: /delete product/i }))
-    const confirmDialog = await screen.findByRole('dialog', { name: 'Delete product?' })
+    fireEvent.click(screen.getByRole('button', { name: /delete asset/i }))
+    const confirmDialog = await screen.findByRole('dialog', { name: 'Delete asset?' })
     fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Delete' }))
 
     await screen.findByText('No assets yet')
