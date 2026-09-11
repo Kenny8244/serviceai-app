@@ -5,11 +5,19 @@ require('dotenv').config({ path: path.resolve(__dirname, '../../worker/.dev.vars
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
-const supabaseUrl = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
+const CONFIG_HINT =
+  'Copy worker/.dev.vars.example → worker/.dev.vars and set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (or ANON_KEY). Prefer Worker SUPABASE_* names, not VITE_*.';
+
+function isPlaceholder(value) {
+  return !value || /your-supabase|your-project-ref|replace-with/i.test(value);
+}
+
+// Prefer Worker SUPABASE_* names; VITE_* is legacy-only fallback.
+const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
 const supabaseKey = (
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.VITE_SUPABASE_ANON_KEY ||
   process.env.SUPABASE_ANON_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
   ''
 ).trim();
 
@@ -41,8 +49,9 @@ const EXPECTED_ATTRIBUTES = {
 async function checkDatabase() {
     console.log('Checking database status...\n');
 
-    if (!supabaseUrl || !supabaseKey) {
-        console.error('Missing SUPABASE_URL / keys in worker/.dev.vars (or db/.env)');
+    if (!supabaseUrl || !supabaseKey || isPlaceholder(supabaseUrl) || isPlaceholder(supabaseKey)) {
+        console.error('Missing or placeholder SUPABASE_URL / keys.');
+        console.error(CONFIG_HINT);
         process.exit(1);
     }
 
@@ -211,11 +220,40 @@ async function checkDatabase() {
         }
     }
 
+    console.log('\nRow Level Security (SCRUM-29):');
+    {
+        const { data, error } = await supabase.rpc('check_core_rls_status');
+        if (error) {
+            failed = true;
+            console.log(`   FAIL ${error.message}`);
+            console.log('         Apply db/migrations/20260911000000_tenant_rls.sql');
+        } else {
+            const rows = data || [];
+            const missing = CORE_TABLES.filter((name) => !rows.some((row) => row.table_name === name));
+            missing.forEach((name) => {
+                failed = true;
+                console.log(`   FAIL ${name}: not reported by check_core_rls_status`);
+            });
+            rows.forEach((row) => {
+                if (!row.rls_enabled || row.policy_count < 1) {
+                    failed = true;
+                    console.log(
+                        `   FAIL ${row.table_name}: rls=${row.rls_enabled} policies=${row.policy_count}`
+                    );
+                } else {
+                    console.log(`   OK   ${row.table_name}: RLS on, ${row.policy_count} polic(y/ies)`);
+                }
+            });
+        }
+    }
+
     if (failed) {
         console.log('\nDatabase check failed. Apply db/migrations/20240207000000_complete_setup.sql');
         console.log('then db/migrations/20260902000000_auth_profile_fields.sql');
         console.log('then db/migrations/20260909000000_scrum33_object_type_seed.sql');
-        console.log('then db/migrations/20260909120000_scrum34_object_type_attributes.sql in the SQL Editor.');
+        console.log('then db/migrations/20260909120000_scrum34_object_type_attributes.sql');
+        console.log('then db/migrations/20260911000000_tenant_rls.sql in the SQL Editor.');
+        console.log('After RLS: npm run db:rls-test');
         process.exit(1);
     }
 

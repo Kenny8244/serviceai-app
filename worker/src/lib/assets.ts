@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Asset, Env } from '../types'
-import { getWorkspaceIdForProfile } from './authAccount'
+import { resolvePreferredWorkspaceId } from './authAccount'
 import {
   defaultObjectTypeId,
   ensureWorkspaceObjectTypes,
@@ -8,7 +8,7 @@ import {
   listWorkspaceObjectTypes,
   ObjectTypesHttpError,
 } from './objectTypes'
-import { getSupabaseAdmin } from './supabase'
+import { getSupabaseAdmin, SUPABASE_CONFIG_HINT } from './supabase'
 
 const OBJECT_COLUMNS =
   'object_id, name, status, custom_fields, created_at, updated_at, is_deleted, object_type_id, object_types(name)'
@@ -54,7 +54,7 @@ type ObjectRow = {
 function requireAdmin(env: Env): SupabaseClient {
   const admin = getSupabaseAdmin(env)
   if (!admin) {
-    throw new AssetsHttpError('Assets are not configured. Set SUPABASE_SERVICE_ROLE_KEY on the API.', 503)
+    throw new AssetsHttpError(`Assets are not configured. ${SUPABASE_CONFIG_HINT}`, 503)
   }
   return admin
 }
@@ -255,16 +255,21 @@ function asCatalogError(error: unknown): never {
 
 async function loadWorkspaceContext(
   env: Env,
-  userId: string
+  userId: string,
+  preferredWorkspaceId?: string | null
 ): Promise<{ admin: SupabaseClient; workspaceId: string } | null> {
   const admin = requireAdmin(env)
-  const workspaceId = await getWorkspaceIdForProfile(admin, userId)
+  const workspaceId = await resolvePreferredWorkspaceId(admin, userId, preferredWorkspaceId)
   if (!workspaceId) return null
   return { admin, workspaceId }
 }
 
-export async function listWorkspaceAssets(env: Env, userId: string): Promise<Asset[]> {
-  const context = await loadWorkspaceContext(env, userId)
+export async function listWorkspaceAssets(
+  env: Env,
+  userId: string,
+  preferredWorkspaceId?: string | null
+): Promise<Asset[]> {
+  const context = await loadWorkspaceContext(env, userId, preferredWorkspaceId)
   if (!context) return []
 
   const { data, error } = await context.admin
@@ -282,8 +287,13 @@ export async function listWorkspaceAssets(env: Env, userId: string): Promise<Ass
   return ((data ?? []) as ObjectRow[]).map((row) => mapObjectToAsset(row, userId))
 }
 
-export async function getWorkspaceAsset(env: Env, userId: string, assetId: string): Promise<Asset | null> {
-  const context = await loadWorkspaceContext(env, userId)
+export async function getWorkspaceAsset(
+  env: Env,
+  userId: string,
+  assetId: string,
+  preferredWorkspaceId?: string | null
+): Promise<Asset | null> {
+  const context = await loadWorkspaceContext(env, userId, preferredWorkspaceId)
   if (!context) return null
 
   const { data, error } = await context.admin
@@ -309,7 +319,8 @@ async function resolveObjectTypeId(
   admin: SupabaseClient,
   workspaceId: string,
   requestedId?: string | null,
-  allowInactiveId?: string | null
+  allowInactiveId?: string | null,
+  preferredWorkspaceId?: string | null
 ): Promise<string> {
   try {
     await ensureWorkspaceObjectTypes(admin, workspaceId)
@@ -333,7 +344,7 @@ async function resolveObjectTypeId(
 
   let types
   try {
-    types = await listWorkspaceObjectTypes(env, userId)
+    types = await listWorkspaceObjectTypes(env, userId, preferredWorkspaceId)
   } catch (error) {
     asCatalogError(error)
   }
@@ -342,8 +353,13 @@ async function resolveObjectTypeId(
   return fallbackId
 }
 
-export async function createWorkspaceAsset(env: Env, userId: string, input: CreateAssetInput): Promise<Asset> {
-  const context = await loadWorkspaceContext(env, userId)
+export async function createWorkspaceAsset(
+  env: Env,
+  userId: string,
+  input: CreateAssetInput,
+  preferredWorkspaceId?: string | null
+): Promise<Asset> {
+  const context = await loadWorkspaceContext(env, userId, preferredWorkspaceId)
   if (!context) {
     throw new AssetsHttpError('No workspace found for this account.', 400)
   }
@@ -358,7 +374,9 @@ export async function createWorkspaceAsset(env: Env, userId: string, input: Crea
     userId,
     context.admin,
     context.workspaceId,
-    input.objectTypeId
+    input.objectTypeId,
+    null,
+    preferredWorkspaceId
   )
   const type = await findWorkspaceObjectType(context.admin, context.workspaceId, typeId)
   const fields = customFieldsFromInput(input, type?.attributes ?? [])
@@ -390,14 +408,15 @@ export async function updateWorkspaceAsset(
   env: Env,
   userId: string,
   assetId: string,
-  input: CreateAssetInput
+  input: CreateAssetInput,
+  preferredWorkspaceId?: string | null
 ): Promise<Asset> {
-  const context = await loadWorkspaceContext(env, userId)
+  const context = await loadWorkspaceContext(env, userId, preferredWorkspaceId)
   if (!context) {
     throw new AssetsHttpError('No workspace found for this account.', 400)
   }
 
-  const existing = await getWorkspaceAsset(env, userId, assetId)
+  const existing = await getWorkspaceAsset(env, userId, assetId, preferredWorkspaceId)
   if (!existing) {
     throw new AssetsHttpError('Asset not found', 404)
   }
@@ -414,7 +433,8 @@ export async function updateWorkspaceAsset(
         context.admin,
         context.workspaceId,
         input.objectTypeId,
-        existing.object_type_id
+        existing.object_type_id,
+        preferredWorkspaceId
       )
     : existing.object_type_id
   const type = await findWorkspaceObjectType(context.admin, context.workspaceId, nextTypeId)
@@ -444,13 +464,18 @@ export async function updateWorkspaceAsset(
   return mapObjectToAsset(data as ObjectRow, userId)
 }
 
-export async function deleteWorkspaceAsset(env: Env, userId: string, assetId: string): Promise<void> {
-  const context = await loadWorkspaceContext(env, userId)
+export async function deleteWorkspaceAsset(
+  env: Env,
+  userId: string,
+  assetId: string,
+  preferredWorkspaceId?: string | null
+): Promise<void> {
+  const context = await loadWorkspaceContext(env, userId, preferredWorkspaceId)
   if (!context) {
     throw new AssetsHttpError('No workspace found for this account.', 400)
   }
 
-  const existing = await getWorkspaceAsset(env, userId, assetId)
+  const existing = await getWorkspaceAsset(env, userId, assetId, preferredWorkspaceId)
   if (!existing) {
     throw new AssetsHttpError('Asset not found', 404)
   }

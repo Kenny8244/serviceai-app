@@ -14,6 +14,7 @@ export async function generateToken(
     userId: payload.userId,
     email: payload.email,
     organizationId: payload.organizationId || 'default-org-id',
+    ...(payload.workspaceId ? { workspaceId: payload.workspaceId } : {}),
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime(options.rememberMe ? '30d' : '1d')
@@ -26,10 +27,12 @@ export async function verifyToken(
 ): Promise<JwtPayload | null> {
   try {
     const { payload } = await jwtVerify(token, getSecret(env))
+    const workspaceId = typeof payload.workspaceId === 'string' ? payload.workspaceId : undefined
     return {
       userId: payload.userId as string,
       email: payload.email as string,
       organizationId: (payload.organizationId as string) || 'default-org-id',
+      ...(workspaceId ? { workspaceId } : {}),
     }
   } catch {
     return null

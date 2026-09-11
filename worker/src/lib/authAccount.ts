@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Env } from '../types'
-import { getSupabase, getSupabaseAdmin } from './supabase'
+import { getSupabase, getSupabaseAdmin, isSupabasePlaceholder, SUPABASE_CONFIG_HINT } from './supabase'
 
 export class AuthHttpError extends Error {
   constructor(
@@ -34,38 +34,40 @@ export type AuthAccount = {
   companySize?: string
   industry?: string
   tenantId?: string
+  workspaceId?: string
   createdAt: string
   updatedAt: string
-}
-
-function isPlaceholder(value?: string): boolean {
-  return !value || /your-supabase|your-project-ref|replace-with/i.test(value)
 }
 
 export function hasSupabaseLogin(env: Env): boolean {
   return Boolean(
     env.SUPABASE_URL &&
       env.SUPABASE_ANON_KEY &&
-      !isPlaceholder(env.SUPABASE_URL) &&
-      !isPlaceholder(env.SUPABASE_ANON_KEY)
+      !isSupabasePlaceholder(env.SUPABASE_URL) &&
+      !isSupabasePlaceholder(env.SUPABASE_ANON_KEY)
   )
 }
 
 export function hasSupabaseAdminAccess(env: Env): boolean {
-  return hasSupabaseLogin(env) && Boolean(env.SUPABASE_SERVICE_ROLE_KEY && !isPlaceholder(env.SUPABASE_SERVICE_ROLE_KEY))
+  return (
+    hasSupabaseLogin(env) &&
+    Boolean(env.SUPABASE_SERVICE_ROLE_KEY && !isSupabasePlaceholder(env.SUPABASE_SERVICE_ROLE_KEY))
+  )
 }
 
 function requireAdmin(env: Env): SupabaseClient {
   const admin = getSupabaseAdmin(env)
   if (!admin) {
-    throw new AuthHttpError('Sign-up is not configured. Set SUPABASE_SERVICE_ROLE_KEY on the API.', 503)
+    throw new AuthHttpError(`Sign-up is not configured. ${SUPABASE_CONFIG_HINT}`, 503)
   }
   return admin
 }
 
 function requireAnon(env: Env): SupabaseClient {
   const client = getSupabase(env)
-  if (!client) throw new AuthHttpError('Authentication service is not configured.', 503)
+  if (!client) {
+    throw new AuthHttpError(`Authentication service is not configured. ${SUPABASE_CONFIG_HINT}`, 503)
+  }
   return client
 }
 
@@ -134,31 +136,57 @@ export async function getWorkspaceIdForProfile(
   return role?.workspace_id ?? null
 }
 
-async function loadTenantForProfile(client: SupabaseClient, profileId: string): Promise<TenantRow | null> {
+/** Prefer JWT/active workspace when the user is a member; otherwise first membership.
+ * Never trusts a preferred id without a matching user_workspace_roles row.
+ */
+export async function resolvePreferredWorkspaceId(
+  client: SupabaseClient,
+  profileId: string,
+  preferredWorkspaceId?: string | null
+): Promise<string | null> {
+  const preferred =
+    typeof preferredWorkspaceId === 'string' ? preferredWorkspaceId.trim() : ''
+  if (preferred) {
+    const { data: role } = await client
+      .from('user_workspace_roles')
+      .select('workspace_id')
+      .eq('profile_id', profileId)
+      .eq('workspace_id', preferred)
+      .maybeSingle()
+    if (role?.workspace_id) return role.workspace_id as string
+    // Spoofed or stale JWT workspaceId: fall through to first membership only.
+  }
+  return getWorkspaceIdForProfile(client, profileId)
+}
+
+async function loadTenantAndWorkspaceForProfile(
+  client: SupabaseClient,
+  profileId: string
+): Promise<{ tenant: TenantRow | null; workspaceId: string | null }> {
   const workspaceId = await getWorkspaceIdForProfile(client, profileId)
-  if (!workspaceId) return null
+  if (!workspaceId) return { tenant: null, workspaceId: null }
 
   const { data: workspace } = await client
     .from('workspaces')
     .select('tenant_id')
     .eq('workspace_id', workspaceId)
     .maybeSingle()
-  if (!workspace?.tenant_id) return null
+  if (!workspace?.tenant_id) return { tenant: null, workspaceId }
 
   const { data: tenant } = await client
     .from('tenants')
     .select('tenant_id, name, company_size, industry')
     .eq('tenant_id', workspace.tenant_id)
     .maybeSingle()
-  return (tenant as TenantRow | null) ?? null
+  return { tenant: (tenant as TenantRow | null) ?? null, workspaceId }
 }
 
 export async function findAccountById(env: Env, userId: string): Promise<AuthAccount | null> {
   const client = dbClient(env)
   const { data, error } = await client.from('profiles').select('*').eq('id', userId).maybeSingle()
   if (error || !data) return null
-  const tenant = await loadTenantForProfile(client, userId)
-  return mapAccount(data as ProfileRow, tenant)
+  const { tenant, workspaceId } = await loadTenantAndWorkspaceForProfile(client, userId)
+  return { ...mapAccount(data as ProfileRow, tenant), workspaceId: workspaceId ?? undefined }
 }
 
 export async function findAccountByEmail(env: Env, email: string): Promise<AuthAccount | null> {
@@ -169,8 +197,8 @@ export async function findAccountByEmail(env: Env, email: string): Promise<AuthA
     .eq('email', email.trim().toLowerCase())
     .maybeSingle()
   if (error || !data) return null
-  const tenant = await loadTenantForProfile(client, data.id)
-  return mapAccount(data as ProfileRow, tenant)
+  const { tenant, workspaceId } = await loadTenantAndWorkspaceForProfile(client, data.id)
+  return { ...mapAccount(data as ProfileRow, tenant), workspaceId: workspaceId ?? undefined }
 }
 
 function isDuplicateEmail(message: string): boolean {
@@ -254,20 +282,23 @@ export async function registerAccount(env: Env, input: RegisterInput): Promise<A
     const { ensureWorkspaceObjectTypes } = await import('./objectTypes')
     await ensureWorkspaceObjectTypes(admin, workspace.workspace_id)
 
-    return mapAccount(
-      {
-        id: userId,
-        email,
-        full_name,
-        first_name: input.firstName,
-        last_name: input.lastName,
-        phone_number: input.phoneNumber,
-        job_title: input.jobTitle || null,
-        created_at: data.user.created_at,
-        updated_at: data.user.updated_at || data.user.created_at,
-      },
-      tenant as TenantRow
-    )
+    return {
+      ...mapAccount(
+        {
+          id: userId,
+          email,
+          full_name,
+          first_name: input.firstName,
+          last_name: input.lastName,
+          phone_number: input.phoneNumber,
+          job_title: input.jobTitle || null,
+          created_at: data.user.created_at,
+          updated_at: data.user.updated_at || data.user.created_at,
+        },
+        tenant as TenantRow
+      ),
+      workspaceId: workspace.workspace_id,
+    }
   } catch (err) {
     await admin.auth.admin.deleteUser(userId).catch(() => undefined)
     const message = err instanceof Error ? err.message : 'Failed to create account'

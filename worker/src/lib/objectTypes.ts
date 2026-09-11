@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Env } from '../types'
-import { getWorkspaceIdForProfile } from './authAccount'
-import { getSupabaseAdmin } from './supabase'
+import { resolvePreferredWorkspaceId } from './authAccount'
+import { getSupabaseAdmin, SUPABASE_CONFIG_HINT } from './supabase'
 
 export class ObjectTypesHttpError extends Error {
   constructor(
@@ -93,7 +93,7 @@ function requireAdmin(env: Env): SupabaseClient {
   const admin = getSupabaseAdmin(env)
   if (!admin) {
     throw new ObjectTypesHttpError(
-      'Object types are not configured. Set SUPABASE_SERVICE_ROLE_KEY on the API.',
+      `Object types are not configured. ${SUPABASE_CONFIG_HINT}`,
       503
     )
   }
@@ -187,9 +187,13 @@ async function withAttributes(admin: SupabaseClient, types: ObjectTypeRecord[]):
 
 const TYPE_COLUMNS = 'object_type_id, schema_id, name, description, is_active, created_at, updated_at'
 
-async function loadWorkspaceContext(env: Env, userId: string): Promise<WorkspaceContext | null> {
+async function loadWorkspaceContext(
+  env: Env,
+  userId: string,
+  preferredWorkspaceId?: string | null
+): Promise<WorkspaceContext | null> {
   const admin = requireAdmin(env)
-  const workspaceId = await getWorkspaceIdForProfile(admin, userId)
+  const workspaceId = await resolvePreferredWorkspaceId(admin, userId, preferredWorkspaceId)
   if (!workspaceId) return null
   return { admin, workspaceId }
 }
@@ -420,8 +424,12 @@ function hasStaleReorderThresholdLabel(types: ObjectTypeRecord[]): boolean {
   )
 }
 
-export async function listWorkspaceObjectTypes(env: Env, userId: string): Promise<ObjectTypeRecord[]> {
-  const context = await loadWorkspaceContext(env, userId)
+export async function listWorkspaceObjectTypes(
+  env: Env,
+  userId: string,
+  preferredWorkspaceId?: string | null
+): Promise<ObjectTypeRecord[]> {
+  const context = await loadWorkspaceContext(env, userId, preferredWorkspaceId)
   if (!context) return []
   const existing = await loadTypesForWorkspace(context.admin, context.workspaceId)
   if (existing.length > 0 && !hasStaleReorderThresholdLabel(existing)) return existing
@@ -438,9 +446,10 @@ export type CreateObjectTypeInput = {
 export async function createWorkspaceObjectType(
   env: Env,
   userId: string,
-  input: CreateObjectTypeInput
+  input: CreateObjectTypeInput,
+  preferredWorkspaceId?: string | null
 ): Promise<ObjectTypeRecord> {
-  const context = await loadWorkspaceContext(env, userId)
+  const context = await loadWorkspaceContext(env, userId, preferredWorkspaceId)
   if (!context) {
     throw new ObjectTypesHttpError('No workspace found for this account.', 400)
   }
@@ -492,9 +501,10 @@ export async function updateWorkspaceObjectType(
   env: Env,
   userId: string,
   typeId: string,
-  input: UpdateObjectTypeInput
+  input: UpdateObjectTypeInput,
+  preferredWorkspaceId?: string | null
 ): Promise<ObjectTypeRecord> {
-  const context = await loadWorkspaceContext(env, userId)
+  const context = await loadWorkspaceContext(env, userId, preferredWorkspaceId)
   if (!context) {
     throw new ObjectTypesHttpError('No workspace found for this account.', 400)
   }
@@ -523,19 +533,28 @@ export async function updateWorkspaceObjectType(
     patch.is_active = input.isActive
   }
 
+  const schemaIds = await schemaIdsForWorkspace(context.admin, context.workspaceId)
+  if (schemaIds.length === 0) {
+    throw new ObjectTypesHttpError('Object type not found.', 404)
+  }
+
   const updated = await context.admin
     .from('object_types')
     .update(patch)
     .eq('object_type_id', typeId)
+    .in('schema_id', schemaIds)
     .select(TYPE_COLUMNS)
-    .single()
+    .maybeSingle()
 
-  if (updated.error || !updated.data) {
-    if (updated.error?.code === '23505') {
+  if (updated.error) {
+    if (updated.error.code === '23505') {
       throw new ObjectTypesHttpError('An object type with this name already exists.', 409)
     }
-    console.error('Failed to update object type:', updated.error?.message)
+    console.error('Failed to update object type:', updated.error.message)
     throw new ObjectTypesHttpError('Could not update object type.', 500)
+  }
+  if (!updated.data) {
+    throw new ObjectTypesHttpError('Object type not found.', 404)
   }
 
   const mapped = mapObjectType(updated.data as ObjectTypeRow)

@@ -11,6 +11,7 @@ export interface JwtPayload {
   userId: string
   email: string
   organizationId: string
+  workspaceId?: string
 }
 
 export interface StoredUser {

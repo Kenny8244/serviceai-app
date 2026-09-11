@@ -1,0 +1,10 @@
+# Copy to worker/.dev.vars for local wrangler dev (never commit .dev.vars).
+# Frontend does not use these — only the Worker API.
+
+# Required for Supabase-backed auth / assets / object types
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+
+# JWT signing for API sessions (use a long random string in real environments)
+JWT_SECRET=replace-with-a-long-random-secret

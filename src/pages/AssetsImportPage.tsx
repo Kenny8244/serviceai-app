@@ -115,7 +115,7 @@ function AssetsImportPage() {
           <CardHeader>
             <CardTitle className="flex items-center text-lg">
               <Upload className="mr-2 h-5 w-5" />
-              CSV file
+              CSV file0
             </CardTitle>
             <CardDescription>
               Columns are mapped automatically. {CSV_NAME_HINT}

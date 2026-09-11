@@ -1,6 +1,6 @@
 "use client"
 
-import { useSyncExternalStore } from "react"
+import { useEffect, useSyncExternalStore } from "react"
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocation } from "react-router-dom"
 import {
   AuthPage,
@@ -26,6 +26,7 @@ import {
   getStoredVerticalForUser,
   clearSelectedVertical,
 } from "@/lib/verticalStorage"
+import { getActiveWorkspaceId } from "@/lib/workspaceStorage"
 import { getAuthSessionVersion, subscribeAuthSession } from "@/lib/authSession"
 import { apiService, type AuthResponse } from "@/services/api"
 
@@ -39,6 +40,14 @@ async function persistVertical(verticalId: string) {
     await apiService.selectVertical(verticalId)
   } catch (error) {
     console.error("Failed to persist vertical selection:", error)
+  }
+}
+
+async function restoreActiveWorkspace(preferredWorkspaceId?: string | null) {
+  try {
+    await apiService.ensureActiveWorkspace(preferredWorkspaceId)
+  } catch (error) {
+    console.error("Failed to restore active workspace:", error)
   }
 }
 
@@ -63,6 +72,7 @@ function AuthRoute() {
 
   const continueAfterAuth = async (response: AuthResponse, options?: { isNewAccount?: boolean }) => {
     const userId = response.user.id
+    await restoreActiveWorkspace(response.workspaceId)
 
     if (options?.isNewAccount) {
       clearSelectedVertical()
@@ -102,7 +112,7 @@ function AuthRoute() {
   }
 
   if (isAuthenticated) {
-    return <SavedVerticalRedirect />
+    return <SavedSessionRedirect />
   }
 
   return <AuthPage onAuthSuccess={continueAfterAuth} />
@@ -117,12 +127,23 @@ function OnboardingRoute() {
 
   return (
     <OnboardingConfirmation
-      onComplete={() => navigate("/dashboard", { state: { verticalId }, replace: true })}
+      onComplete={(nextVerticalId) =>
+        navigate("/dashboard", { state: { verticalId: nextVerticalId || verticalId }, replace: true })
+      }
     />
   )
 }
 
-function SavedVerticalRedirect() {
+function SavedSessionRedirect() {
+  const isAuthenticated = useIsAuthenticated()
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const userId = apiService.getAuthUserId()
+    const preferred = getActiveWorkspaceId(userId)
+    void restoreActiveWorkspace(preferred)
+  }, [isAuthenticated])
+
   return (
     <Navigate
       to={hasSelectedVertical() ? "/dashboard" : "/vertical-selection"}
@@ -133,6 +154,13 @@ function SavedVerticalRedirect() {
 
 function RequireAuth() {
   const isAuthenticated = useIsAuthenticated()
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const userId = apiService.getAuthUserId()
+    void restoreActiveWorkspace(getActiveWorkspaceId(userId))
+  }, [isAuthenticated])
+
   if (!isAuthenticated) {
     return <Navigate to="/auth" replace />
   }
@@ -147,14 +175,14 @@ export default function RouterApp() {
           <Route path="/auth" element={<AuthRoute />} />
 
           <Route element={<RequireAuth />}>
-            <Route path="/" element={<SavedVerticalRedirect />} />
+            <Route path="/" element={<SavedSessionRedirect />} />
             <Route path="/vertical-selection" element={<VerticalRoute />} />
             <Route path="/onboarding" element={<OnboardingRoute />} />
             <Route path="/dashboard-old" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/retail" element={<SavedVerticalRedirect />} />
-            <Route path="/restaurant" element={<SavedVerticalRedirect />} />
-            <Route path="/marketplace" element={<SavedVerticalRedirect />} />
-            <Route path="/enterprise" element={<SavedVerticalRedirect />} />
+            <Route path="/retail" element={<SavedSessionRedirect />} />
+            <Route path="/restaurant" element={<SavedSessionRedirect />} />
+            <Route path="/marketplace" element={<SavedSessionRedirect />} />
+            <Route path="/enterprise" element={<SavedSessionRedirect />} />
 
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />

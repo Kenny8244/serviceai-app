@@ -357,7 +357,7 @@ export function AIHub({ className = "" }: AIHubProps) {
                   ))}
                 </div>
 
-                {/* Chat Input */}
+ 0000               {/* Chat Input */}
                 <div className="flex space-x-2">
                   <Input
                     type="text"

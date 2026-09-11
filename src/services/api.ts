@@ -1,4 +1,9 @@
 import { isPublicAuthUrl, notifyAuthSessionChanged } from '@/lib/authSession';
+import {
+  clearActiveWorkspaceId,
+  getActiveWorkspaceId,
+  setActiveWorkspaceId,
+} from '@/lib/workspaceStorage';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -23,11 +28,29 @@ export interface UserVertical {
   selectedAt: string;
 }
 
+export interface Workspace {
+  id: string;
+  name: string;
+  description: string | null;
+  tenantId: string;
+  role: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AuthResponse {
   user: User;
   token: string;
   expiresAt: string;
   selectedVertical?: UserVertical | null;
+  workspaceId?: string | null;
+}
+
+export interface WorkspaceSessionResponse {
+  workspace: Workspace;
+  token: string;
+  expiresAt: string;
+  workspaceId: string;
 }
 
 export interface CreateUserRequest {
@@ -404,6 +427,87 @@ class ApiService {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse<UserVertical | null>(response);
+  }
+
+  // Workspace endpoints
+  async listWorkspaces(): Promise<{ workspaces: Workspace[] }> {
+    const response = await fetch(`${API_BASE_URL}/workspaces`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse<{ workspaces: Workspace[] }>(response);
+  }
+
+  async completeOnboardingWorkspace(input: {
+    name: string;
+    description?: string;
+  }): Promise<WorkspaceSessionResponse> {
+    const response = await fetch(`${API_BASE_URL}/onboarding/workspace`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify(input),
+    });
+    const data = await this.handleResponse<WorkspaceSessionResponse>(response);
+    this.applyWorkspaceSession(data);
+    return data;
+  }
+
+  async setActiveWorkspace(workspaceId: string): Promise<WorkspaceSessionResponse> {
+    const response = await fetch(`${API_BASE_URL}/workspaces/active`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify({ workspaceId }),
+    });
+    const data = await this.handleResponse<WorkspaceSessionResponse>(response);
+    this.applyWorkspaceSession(data);
+    return data;
+  }
+
+  /**
+   * Persist active workspace after auth or restore from API when missing locally.
+   */
+  async ensureActiveWorkspace(preferredWorkspaceId?: string | null): Promise<string | null> {
+    const userId = this.getAuthUserId();
+    if (!userId || !this.isAuthenticated()) return null;
+
+    const fromToken = this.readWorkspaceIdFromToken(this.getAuthToken() || '');
+    const stored = getActiveWorkspaceId(userId);
+    let workspaceId = preferredWorkspaceId || stored || fromToken;
+
+    if (!workspaceId) {
+      try {
+        const { workspaces } = await this.listWorkspaces();
+        workspaceId = workspaces[0]?.id ?? null;
+      } catch (error) {
+        console.error('Failed to list workspaces:', error);
+        return null;
+      }
+    }
+
+    if (!workspaceId) return null;
+
+    if (workspaceId !== fromToken) {
+      try {
+        await this.setActiveWorkspace(workspaceId);
+        return workspaceId;
+      } catch (error) {
+        console.error('Failed to activate workspace:', error);
+      }
+    }
+
+    setActiveWorkspaceId(workspaceId, userId);
+    return workspaceId;
+  }
+
+  private applyWorkspaceSession(data: WorkspaceSessionResponse): void {
+    if (data.token) {
+      this.setAuthToken(data.token);
+    }
+    const userId = this.getAuthUserId();
+    const workspaceId = data.workspaceId || data.workspace?.id;
+    if (workspaceId) {
+      setActiveWorkspaceId(workspaceId, userId);
+    }
   }
 
   // Service Request endpoints
@@ -887,6 +991,10 @@ class ApiService {
     } else {
       localStorage.removeItem('authUserId');
     }
+    const workspaceId = this.readWorkspaceIdFromToken(token);
+    if (workspaceId && userId) {
+      setActiveWorkspaceId(workspaceId, userId);
+    }
   }
 
   getAuthToken(): string | null {
@@ -939,6 +1047,7 @@ class ApiService {
     localStorage.removeItem('authUserId');
     sessionStorage.removeItem('authToken');
     sessionStorage.removeItem('authUserId');
+    clearActiveWorkspaceId();
     clearObjectTypesCache();
     if (hadToken && options?.notify !== false) {
       notifyAuthSessionChanged();
@@ -950,12 +1059,17 @@ class ApiService {
     return typeof payload?.userId === 'string' ? payload.userId : null;
   }
 
-  private readTokenPayload(token: string): { userId?: string; exp?: number } | null {
+  private readWorkspaceIdFromToken(token: string): string | null {
+    const payload = this.readTokenPayload(token);
+    return typeof payload?.workspaceId === 'string' ? payload.workspaceId : null;
+  }
+
+  private readTokenPayload(token: string): { userId?: string; workspaceId?: string; exp?: number } | null {
     try {
       const part = token.split('.')[1];
       if (!part) return null;
       const padded = part.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (part.length % 4)) % 4);
-      return JSON.parse(atob(padded)) as { userId?: string; exp?: number };
+      return JSON.parse(atob(padded)) as { userId?: string; workspaceId?: string; exp?: number };
     } catch {
       return null;
     }

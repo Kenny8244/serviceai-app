@@ -21,7 +21,7 @@
 12. **audit_logs** - Complete change tracking
 
 #### Key Features Implemented:
-- ✅ **Row Level Security** (RLS) for data isolation
+- ✅ **Row Level Security** (RLS) for data isolation — apply `db/migrations/20260911000000_tenant_rls.sql`, verify with `npm run db:check` and `npm run db:rls-test`
 - ✅ **JSONB Attributes** for flexible asset properties
 - ✅ **Audit Triggers** for automatic change logging
 - ✅ **Soft Delete** for data recovery
@@ -321,17 +321,21 @@ ELASTICSEARCH_URL=http://localhost:9200
 ```
 
 ### Environment Variables
-```bash
-# Supabase (Working)
-VITE_SUPABASE_URL=https://xfmstnqriblpuxjpcima.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
-# Local DB (Not Currently Used)
-DB_HOST=localhost
-DB_PORT=5432
-DB_USERNAME=kennyasooye
-DB_PASSWORD=
-DB_NAME=service_ai
+Supabase credentials belong on the **Worker only** (`worker/.dev.vars` locally; Wrangler secrets in production). Do not put them in frontend `VITE_*` vars.
+
+```bash
+# Copy from worker/.dev.vars.example → worker/.dev.vars
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+JWT_SECRET=replace-with-a-long-random-secret
+```
+
+Optional frontend override (usually unnecessary locally — Vite proxies `/api`):
+
+```bash
+# VITE_API_URL=http://127.0.0.1:8787
 ```
 
 ### Default Credentials

@@ -28,7 +28,14 @@ import {
   ObjectTypesHttpError,
   updateWorkspaceObjectType,
 } from './lib/objectTypes'
+import {
+  WorkspacesHttpError,
+  assertWorkspaceMembership,
+  completeOnboardingWorkspace,
+  listWorkspacesForUser,
+} from './lib/workspaces'
 import { isValidVerticalId, resolveUserVertical, saveTenantVertical } from './lib/tenantVertical'
+import { getSupabaseConfigStatus } from './lib/supabase'
 import {
   AI_FORMS,
   AI_SEARCH_DATA,
@@ -41,6 +48,21 @@ import {
 } from './lib/mocks'
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>()
+
+let supabaseConfigWarned = false
+
+app.use('*', async (c, next) => {
+  if (!supabaseConfigWarned) {
+    const status = getSupabaseConfigStatus(c.env)
+    if (!status.supabaseAdminConfigured) {
+      console.warn(
+        `[serviceai-api] Supabase not fully configured (configured=${status.supabaseConfigured}, admin=${status.supabaseAdminConfigured}). ${status.hint ?? ''}`
+      )
+    }
+    supabaseConfigWarned = true
+  }
+  await next()
+})
 
 app.use('*', async (c, next) => {
   const origins = [c.env.FRONTEND_URL, 'http://localhost:5173', 'https://serviceai-app.pages.dev']
@@ -72,13 +94,18 @@ const requireAuth = createMiddleware<{ Bindings: Env; Variables: Variables }>(as
   await next()
 })
 
-app.get('/health', (c) =>
-  c.json({
+app.get('/health', (c) => {
+  const supabase = getSupabaseConfigStatus(c.env)
+  return c.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
     environment: 'cloudflare-workers',
+    supabaseConfigured: supabase.supabaseConfigured,
+    supabaseAdminConfigured: supabase.supabaseAdminConfigured,
+    usingDemoFallback: supabase.usingDemoFallback,
+    ...(supabase.hint ? { configHint: supabase.hint } : {}),
   })
-)
+})
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -107,12 +134,14 @@ app.post('/api/auth/register', async (c) => {
         userId: account.id,
         email: account.email,
         organizationId: account.tenantId,
+        workspaceId: account.workspaceId,
       })
       return c.json({
         user: publicUser(account),
         token,
         expiresAt: getTokenExpiration(),
         selectedVertical: null,
+        workspaceId: account.workspaceId ?? null,
       }, 201)
     } catch (error) {
       if (error instanceof AuthHttpError) return c.json({ error: error.message }, error.status)
@@ -168,6 +197,7 @@ app.post('/api/auth/login', async (c) => {
           userId: account.id,
           email: account.email,
           organizationId: account.tenantId,
+          workspaceId: account.workspaceId,
         },
         { rememberMe: persist }
       )
@@ -182,6 +212,7 @@ app.post('/api/auth/login', async (c) => {
         token,
         expiresAt: getTokenExpiration(persist),
         selectedVertical,
+        workspaceId: account.workspaceId ?? null,
       })
     } catch (error) {
       if (error instanceof AuthHttpError) return c.json({ error: error.message }, error.status)
@@ -213,6 +244,7 @@ app.post('/api/auth/demo', async (c) => {
         userId: account.id,
         email: account.email,
         organizationId: account.tenantId,
+        workspaceId: account.workspaceId,
       })
       const selectedVertical = await resolveUserVertical(
         c.env,
@@ -220,7 +252,13 @@ app.post('/api/auth/demo', async (c) => {
         account.id,
         account.tenantId
       )
-      return c.json({ user: publicUser(account), token, expiresAt: getTokenExpiration(), selectedVertical })
+      return c.json({
+        user: publicUser(account),
+        token,
+        expiresAt: getTokenExpiration(),
+        selectedVertical,
+        workspaceId: account.workspaceId ?? null,
+      })
     } catch (error) {
       if (error instanceof AuthHttpError) return c.json({ error: error.message }, error.status)
       console.error('Demo login error:', error)
@@ -272,6 +310,73 @@ app.get('/api/verticals/selected', requireAuth, async (c) => {
   const user = c.get('user')
   const selected = await resolveUserVertical(c.env, c.env.DEMO_KV, user.userId, user.organizationId)
   return c.json(selected)
+})
+
+// ── Workspaces ────────────────────────────────────────────────────────────────
+
+app.get('/api/workspaces', requireAuth, async (c) => {
+  try {
+    const workspaces = await listWorkspacesForUser(c.env, c.get('user').userId)
+    return c.json({ workspaces })
+  } catch (error) {
+    const handled = handleDomainError(error)
+    if (handled) return c.json({ error: handled.error }, handled.status)
+    throw error
+  }
+})
+
+app.post('/api/onboarding/workspace', requireAuth, async (c) => {
+  try {
+    const body = await c.req.json<{ name?: string; description?: string | null }>()
+    const user = c.get('user')
+    const workspace = await completeOnboardingWorkspace(c.env, user.userId, {
+      name: String(body.name ?? ''),
+      description: body.description,
+    })
+    const token = await generateToken(c.env, {
+      userId: user.userId,
+      email: user.email,
+      organizationId: workspace.tenantId || user.organizationId,
+      workspaceId: workspace.id,
+    })
+    return c.json({
+      workspace,
+      token,
+      expiresAt: getTokenExpiration(),
+      workspaceId: workspace.id,
+    })
+  } catch (error) {
+    const handled = handleDomainError(error)
+    if (handled) return c.json({ error: handled.error }, handled.status)
+    throw error
+  }
+})
+
+app.post('/api/workspaces/active', requireAuth, async (c) => {
+  try {
+    const body = await c.req.json<{ workspaceId?: string }>()
+    const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId.trim() : ''
+    if (!workspaceId) return c.json({ error: 'workspaceId is required' }, 400)
+
+    const user = c.get('user')
+    const workspace = await assertWorkspaceMembership(c.env, user.userId, workspaceId)
+    const token = await generateToken(c.env, {
+      userId: user.userId,
+      email: user.email,
+      organizationId: workspace.tenantId || user.organizationId,
+      workspaceId: workspace.id,
+    })
+    return c.json({
+      workspace,
+      token,
+      expiresAt: getTokenExpiration(),
+      workspaceId: workspace.id,
+    })
+  } catch (error) {
+    const handled = handleDomainError(error)
+    if (handled) return c.json({ error: handled.error }, handled.status)
+    throw error
+  }
 })
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -383,8 +488,12 @@ app.patch('/api/service-requests/:id', requireAuth, async (c) => {
 })
 
 function handleDomainError(error: unknown) {
-  if (error instanceof AssetsHttpError || error instanceof ObjectTypesHttpError) {
-    return { error: error.message, status: error.status as 400 | 404 | 409 | 500 | 503 }
+  if (
+    error instanceof AssetsHttpError ||
+    error instanceof ObjectTypesHttpError ||
+    error instanceof WorkspacesHttpError
+  ) {
+    return { error: error.message, status: error.status as 400 | 403 | 404 | 409 | 500 | 503 }
   }
   return null
 }
@@ -393,7 +502,8 @@ function handleDomainError(error: unknown) {
 
 app.get('/api/object-types', requireAuth, async (c) => {
   try {
-    const objectTypes = await listWorkspaceObjectTypes(c.env, c.get('user').userId)
+    const user = c.get('user')
+    const objectTypes = await listWorkspaceObjectTypes(c.env, user.userId, user.workspaceId)
     return c.json({ objectTypes })
   } catch (error) {
     const handled = handleDomainError(error)
@@ -405,11 +515,12 @@ app.get('/api/object-types', requireAuth, async (c) => {
 app.post('/api/object-types', requireAuth, async (c) => {
   try {
     const body = await c.req.json<Record<string, unknown>>()
-    const objectType = await createWorkspaceObjectType(c.env, c.get('user').userId, {
+    const user = c.get('user')
+    const objectType = await createWorkspaceObjectType(c.env, user.userId, {
       name: String(body.name ?? ''),
       description: typeof body.description === 'string' ? body.description : null,
       isActive: typeof body.isActive === 'boolean' ? body.isActive : undefined,
-    })
+    }, user.workspaceId)
     return c.json({ objectType }, 201)
   } catch (error) {
     const handled = handleDomainError(error)
@@ -421,11 +532,12 @@ app.post('/api/object-types', requireAuth, async (c) => {
 app.patch('/api/object-types/:id', requireAuth, async (c) => {
   try {
     const body = await c.req.json<Record<string, unknown>>()
-    const objectType = await updateWorkspaceObjectType(c.env, c.get('user').userId, c.req.param('id'), {
+    const user = c.get('user')
+    const objectType = await updateWorkspaceObjectType(c.env, user.userId, c.req.param('id'), {
       name: typeof body.name === 'string' ? body.name : undefined,
       description: body.description === undefined ? undefined : typeof body.description === 'string' ? body.description : null,
       isActive: typeof body.isActive === 'boolean' ? body.isActive : undefined,
-    })
+    }, user.workspaceId)
     return c.json({ objectType })
   } catch (error) {
     const handled = handleDomainError(error)
@@ -438,7 +550,8 @@ app.patch('/api/object-types/:id', requireAuth, async (c) => {
 
 app.get('/api/assets', requireAuth, async (c) => {
   try {
-    const assets = await listWorkspaceAssets(c.env, c.get('user').userId)
+    const user = c.get('user')
+    const assets = await listWorkspaceAssets(c.env, user.userId, user.workspaceId)
     return c.json(assets.filter((a) => a.is_active))
   } catch (error) {
     const handled = handleDomainError(error)
@@ -449,7 +562,8 @@ app.get('/api/assets', requireAuth, async (c) => {
 
 app.get('/api/assets/:id', requireAuth, async (c) => {
   try {
-    const asset = await getWorkspaceAsset(c.env, c.get('user').userId, c.req.param('id'))
+    const user = c.get('user')
+    const asset = await getWorkspaceAsset(c.env, user.userId, c.req.param('id'), user.workspaceId)
     if (!asset || !asset.is_active) return c.json({ error: 'Asset not found' }, 404)
     return c.json(asset)
   } catch (error) {
@@ -483,7 +597,8 @@ function assetInputFromBody(body: Record<string, unknown>) {
 app.post('/api/assets', requireAuth, async (c) => {
   try {
     const body = await c.req.json<Record<string, unknown>>()
-    const asset = await createWorkspaceAsset(c.env, c.get('user').userId, assetInputFromBody(body))
+    const user = c.get('user')
+    const asset = await createWorkspaceAsset(c.env, user.userId, assetInputFromBody(body), user.workspaceId)
     return c.json(asset, 201)
   } catch (error) {
     const handled = handleDomainError(error)
@@ -495,7 +610,14 @@ app.post('/api/assets', requireAuth, async (c) => {
 app.put('/api/assets/:id', requireAuth, async (c) => {
   try {
     const body = await c.req.json<Record<string, unknown>>()
-    const asset = await updateWorkspaceAsset(c.env, c.get('user').userId, c.req.param('id'), assetInputFromBody(body))
+    const user = c.get('user')
+    const asset = await updateWorkspaceAsset(
+      c.env,
+      user.userId,
+      c.req.param('id'),
+      assetInputFromBody(body),
+      user.workspaceId
+    )
     return c.json(asset)
   } catch (error) {
     const handled = handleDomainError(error)
@@ -506,7 +628,8 @@ app.put('/api/assets/:id', requireAuth, async (c) => {
 
 app.delete('/api/assets/:id', requireAuth, async (c) => {
   try {
-    await deleteWorkspaceAsset(c.env, c.get('user').userId, c.req.param('id'))
+    const user = c.get('user')
+    await deleteWorkspaceAsset(c.env, user.userId, c.req.param('id'), user.workspaceId)
     return c.json({ success: true })
   } catch (error) {
     const handled = handleDomainError(error)
