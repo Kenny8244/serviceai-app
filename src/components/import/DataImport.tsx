@@ -186,25 +186,25 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg flex items-center text-slate-900 dark:text-slate-100">
+        <CardTitle className="text-lg flex items-center text-slate-900 dark:text-foreground">
           <Upload className="h-5 w-5 mr-2" />
           Import Your Data
         </CardTitle>
-        <CardDescription className="text-slate-600 dark:text-slate-400">
+        <CardDescription className="text-slate-600 dark:text-muted-foreground">
           Upload a CSV file or connect to Google Sheets to import your {vertical === 'retail' ? 'products' : vertical === 'restaurant' ? 'menu items' : 'inventory items'}
         </CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-6">
-        <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+        <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-1 bg-slate-100 dark:bg-muted p-1 rounded-lg">
           <button
             type="button"
             onClick={() => setImportMethod('csv')}
             className={`
               flex items-center justify-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all flex-1
               ${importMethod === 'csv'
-                ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                ? 'bg-white dark:bg-card text-blue-700 dark:text-foreground shadow-sm dark:border dark:border-border'
+                : 'text-slate-600 dark:text-muted-foreground hover:text-slate-900 dark:hover:text-foreground'
               }
             `}
           >
@@ -217,8 +217,8 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
             className={`
               flex items-center justify-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all flex-1
               ${importMethod === 'sheets'
-                ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                ? 'bg-white dark:bg-card text-blue-700 dark:text-foreground shadow-sm dark:border dark:border-border'
+                : 'text-slate-600 dark:text-muted-foreground hover:text-slate-900 dark:hover:text-foreground'
               }
             `}
           >
@@ -231,8 +231,8 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
             className={`
               flex items-center justify-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all flex-1
               ${importMethod === 'manual'
-                ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                ? 'bg-white dark:bg-card text-blue-700 dark:text-foreground shadow-sm dark:border dark:border-border'
+                : 'text-slate-600 dark:text-muted-foreground hover:text-slate-900 dark:hover:text-foreground'
               }
             `}
           >

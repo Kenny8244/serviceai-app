@@ -11,7 +11,7 @@ import {
 import { getSupabaseAdmin, SUPABASE_CONFIG_HINT } from './supabase'
 
 const OBJECT_COLUMNS =
-  'object_id, name, status, custom_fields, created_at, updated_at, is_deleted, object_type_id, object_types(name)'
+  'object_id, name, status, custom_fields, created_at, updated_at, deleted_at, is_deleted, object_type_id, object_types(name)'
 
 export class AssetsHttpError extends Error {
   constructor(
@@ -46,6 +46,7 @@ type ObjectRow = {
   custom_fields: unknown
   created_at: string
   updated_at: string
+  deleted_at?: string | null
   is_deleted?: boolean | null
   object_type_id: string
   object_types?: ObjectTypeRel
@@ -166,7 +167,11 @@ function customFieldsFromInput(
   const tags = asTags(previous.tags)
   if (tags) fields.tags = tags
 
-  fields.description = asString(input.description) ?? asString(extras.description) ?? asString(previous.description)
+  // undefined = leave unchanged on update; explicit null/'' clears
+  fields.description =
+    input.description === undefined
+      ? (asString(extras.description) ?? asString(previous.description))
+      : asString(input.description)
   fields.avatar = input.avatar === undefined ? asAvatar(previous.avatar) : avatarFromInput(input)
   fields.category = asString(input.category) ?? asString(extras.category) ?? asString(previous.category)
 
@@ -242,6 +247,7 @@ export function mapObjectToAsset(row: ObjectRow, userId: string): Asset {
     is_active: row.status === 'active',
     created_at: row.created_at,
     updated_at: row.updated_at,
+    deleted_at: row.deleted_at ?? null,
   }
 }
 
@@ -464,7 +470,51 @@ export async function updateWorkspaceAsset(
   return mapObjectToAsset(data as ObjectRow, userId)
 }
 
-export async function deleteWorkspaceAsset(
+/**
+ * Archive relationship rules (SCRUM-40):
+ * - Soft-archive the object (`is_deleted` / `deleted_at` / `status: inactive`) so it
+ *   disappears from default list/get (active-only filters).
+ * - Remove `object_relations` rows involving the asset (no soft-flag on relations;
+ *   objects themselves are not hard-deleted).
+ * - SET NULL on `service_requests.related_asset_object_id` and legacy `related_*_object_id`
+ *   pointing at the asset.
+ * - Leave `stock_transactions` intact for audit history.
+ */
+async function unlinkRelatedRecords(
+  admin: SupabaseClient,
+  workspaceId: string,
+  assetId: string
+): Promise<void> {
+  const { error: relationsError } = await admin
+    .from('object_relations')
+    .delete()
+    .or(`from_object_id.eq.${assetId},to_object_id.eq.${assetId}`)
+
+  if (relationsError) {
+    console.error('Failed to unlink object_relations on archive:', relationsError.message)
+  }
+
+  const relatedColumns = [
+    'related_asset_object_id',
+    'related_item_object_id',
+    'related_equipment_object_id',
+    'related_vendor_object_id',
+  ] as const
+
+  for (const column of relatedColumns) {
+    const { error } = await admin
+      .from('service_requests')
+      .update({ [column]: null })
+      .eq('workspace_id', workspaceId)
+      .eq(column, assetId)
+
+    if (error) {
+      console.error(`Failed to clear service_requests.${column} on archive:`, error.message)
+    }
+  }
+}
+
+export async function archiveWorkspaceAsset(
   env: Env,
   userId: string,
   assetId: string,
@@ -497,7 +547,85 @@ export async function deleteWorkspaceAsset(
     .single()
 
   if (error || !data) {
-    console.error('Failed to delete asset:', error?.message)
+    console.error('Failed to archive asset:', error?.message)
+    throw new AssetsHttpError('Could not archive asset.', 500)
+  }
+
+  await unlinkRelatedRecords(context.admin, context.workspaceId, assetId)
+}
+
+export async function listArchivedWorkspaceAssets(
+  env: Env,
+  userId: string,
+  preferredWorkspaceId?: string | null
+): Promise<Asset[]> {
+  const context = await loadWorkspaceContext(env, userId, preferredWorkspaceId)
+  if (!context) return []
+
+  const { data, error } = await context.admin
+    .from('objects')
+    .select(OBJECT_COLUMNS)
+    .eq('workspace_id', context.workspaceId)
+    .eq('is_deleted', true)
+    .order('deleted_at', { ascending: false })
+
+  if (error) {
+    console.error('Failed to list archived assets:', error.message)
+    throw new AssetsHttpError('Could not load archived assets.', 500)
+  }
+
+  return ((data ?? []) as ObjectRow[]).map((row) => mapObjectToAsset(row, userId))
+}
+
+export async function permanentlyDeleteWorkspaceAsset(
+  env: Env,
+  userId: string,
+  assetId: string,
+  preferredWorkspaceId?: string | null
+): Promise<void> {
+  const context = await loadWorkspaceContext(env, userId, preferredWorkspaceId)
+  if (!context) {
+    throw new AssetsHttpError('No workspace found for this account.', 400)
+  }
+
+  const { data: existing, error: lookupError } = await context.admin
+    .from('objects')
+    .select('object_id, is_deleted')
+    .eq('object_id', assetId)
+    .eq('workspace_id', context.workspaceId)
+    .maybeSingle()
+
+  if (lookupError) {
+    console.error('Failed to look up asset for permanent delete:', lookupError.message)
     throw new AssetsHttpError('Could not delete asset.', 500)
   }
+  if (!existing) {
+    throw new AssetsHttpError('Asset not found', 404)
+  }
+  if (!existing.is_deleted) {
+    throw new AssetsHttpError('Archive the asset before permanently deleting it.', 400)
+  }
+
+  // Hard delete: FK cascades remove stock_transactions / object_relations.
+  const { error } = await context.admin
+    .from('objects')
+    .delete()
+    .eq('object_id', assetId)
+    .eq('workspace_id', context.workspaceId)
+    .eq('is_deleted', true)
+
+  if (error) {
+    console.error('Failed to permanently delete asset:', error.message)
+    throw new AssetsHttpError('Could not permanently delete asset.', 500)
+  }
+}
+
+/** @deprecated Use archiveWorkspaceAsset — soft-delete is archive semantics. */
+export async function deleteWorkspaceAsset(
+  env: Env,
+  userId: string,
+  assetId: string,
+  preferredWorkspaceId?: string | null
+): Promise<void> {
+  return archiveWorkspaceAsset(env, userId, assetId, preferredWorkspaceId)
 }

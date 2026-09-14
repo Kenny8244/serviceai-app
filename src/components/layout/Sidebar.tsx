@@ -63,7 +63,7 @@ export function Sidebar({
       path: '/assets',
       children: [
         { id: 'import', label: 'Import Data', icon: <Plus className="h-4 w-4" />, path: '/assets/import' },
-        { id: 'manage', label: 'Manage Items', icon: <Package className="h-4 w-4" />, path: '/assets/manage', disabled: true },
+        { id: 'manage', label: 'Manage Items', icon: <Package className="h-4 w-4" />, path: '/assets/manage' },
         { id: 'reports', label: 'Inventory Reports', icon: <BarChart3 className="h-4 w-4" />, path: '/assets/reports', disabled: true },
       ],
     },
@@ -157,10 +157,10 @@ export function Sidebar({
           ${collapsed ? 'justify-center px-2 py-2' : 'justify-between px-3 py-2'}
           ${item.disabled ? 'cursor-not-allowed' : ''}
           ${active
-            ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+            ? 'bg-blue-50 dark:bg-accent text-blue-700 dark:text-foreground border-blue-200 dark:border-border'
             : muted
-              ? 'border-transparent text-slate-400 dark:text-slate-500'
-              : 'border-transparent text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100'
+              ? 'border-transparent text-slate-400 dark:text-muted-foreground'
+              : 'border-transparent text-slate-700 dark:text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted hover:text-slate-900 dark:hover:text-foreground'
           }
         `}
       >
@@ -184,8 +184,8 @@ export function Sidebar({
   }
 
   return (
-    <div className={`h-full flex flex-col bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 ${className}`}>
-      <div className={`shrink-0 border-b border-slate-200 dark:border-slate-700 ${collapsed ? 'p-2' : 'p-4'}`}>
+    <div className={`h-full flex flex-col bg-white dark:bg-card border-r border-slate-200 dark:border-border ${className}`}>
+      <div className={`shrink-0 border-b border-slate-200 dark:border-border ${collapsed ? 'p-2' : 'p-4'}`}>
         <div className={`flex ${collapsed ? 'flex-col items-center gap-2' : 'items-center justify-between'}`}>
           <div className={`flex items-center ${collapsed ? 'justify-center' : 'space-x-2'}`}>
             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shrink-0">
@@ -193,8 +193,8 @@ export function Sidebar({
             </div>
             {!collapsed && (
               <div>
-                <h2 className="font-semibold text-slate-900 dark:text-slate-100">ServiceAI</h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">AI-Powered Management</p>
+                <h2 className="font-semibold text-slate-900 dark:text-foreground">ServiceAI</h2>
+                <p className="text-xs text-slate-500 dark:text-muted-foreground">AI-Powered Management</p>
               </div>
             )}
           </div>
@@ -230,10 +230,10 @@ export function Sidebar({
                     className={`
                       w-full flex items-center space-x-2 px-3 py-2 text-sm rounded-lg border border-transparent transition-colors
                       ${child.disabled
-                        ? 'cursor-not-allowed text-slate-400 dark:text-slate-500'
+                        ? 'cursor-not-allowed text-slate-400 dark:text-muted-foreground'
                         : isActive(child.path)
-                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200'
+                          ? 'bg-blue-100 dark:bg-accent text-blue-700 dark:text-foreground'
+                          : 'text-slate-600 dark:text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted hover:text-slate-700 dark:hover:text-foreground'
                       }
                     `}
                   >
@@ -249,7 +249,7 @@ export function Sidebar({
         {!collapsed && (
           <>
             <div className="pt-3 pb-1.5 px-3">
-              <h4 className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              <h4 className="text-[11px] font-semibold text-slate-400 dark:text-muted-foreground uppercase tracking-wider">
                 Quick Actions
               </h4>
             </div>
@@ -257,13 +257,13 @@ export function Sidebar({
               <div key={item.id}>{renderNavButton(item, { muted: true })}</div>
             ))}
 
-            <div className="my-2 mx-3 border-t border-slate-200 dark:border-slate-700" />
+            <div className="my-2 mx-3 border-t border-slate-200 dark:border-border" />
             {renderNavButton(settingsItem)}
           </>
         )}
       </nav>
 
-      <div className={`shrink-0 border-t border-slate-200 dark:border-slate-700 ${collapsed ? 'p-2 space-y-2' : 'px-3 py-2.5'}`}>
+      <div className={`shrink-0 border-t border-slate-200 dark:border-border ${collapsed ? 'p-2 space-y-2' : 'px-3 py-2.5'}`}>
         {collapsed ? (
           <div className="flex flex-col items-center gap-2">
             {renderNavButton(settingsItem)}
@@ -274,7 +274,7 @@ export function Sidebar({
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center min-w-0 gap-2">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shrink-0" />
-              <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
+              <span className="text-xs text-slate-500 dark:text-muted-foreground truncate">
                 All systems operational
               </span>
             </div>

@@ -4,6 +4,11 @@ import {
   getActiveWorkspaceId,
   setActiveWorkspaceId,
 } from '@/lib/workspaceStorage';
+import {
+  clearCachedWorkspacePreferences,
+  setCachedWorkspacePreferences,
+  type WorkspacePreferencesSnapshot,
+} from '@/lib/workspacePreferencesStorage';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -157,6 +162,7 @@ export interface Asset {
   isActive: boolean
   createdAt: string
   updatedAt: string
+  deletedAt?: string | null
 }
 
 export type ObjectTypeAttributeDataType = 'string' | 'number' | 'boolean' | 'text'
@@ -263,6 +269,10 @@ function normalizeAsset(rawValue: unknown): Asset {
     isActive: pickRaw(raw, 'isActive', 'is_active') !== false,
     createdAt: String(pickRaw(raw, 'createdAt', 'created_at') ?? ''),
     updatedAt: String(pickRaw(raw, 'updatedAt', 'updated_at') ?? ''),
+    deletedAt: (() => {
+      const value = pickRaw(raw, 'deletedAt', 'deleted_at')
+      return value == null || value === '' ? null : String(value)
+    })(),
   }
 }
 
@@ -418,7 +428,22 @@ class ApiService {
       headers: this.getAuthHeaders(true),
       body: JSON.stringify({ verticalId }),
     });
-    return this.handleResponse<UserVertical>(response);
+    const data = await this.handleResponse<
+      UserVertical & Partial<WorkspaceSessionResponse>
+    >(response);
+    if (data.token || data.workspaceId || data.workspace?.id) {
+      this.applyWorkspaceSession({
+        workspace: data.workspace as Workspace,
+        token: data.token || this.getAuthToken() || '',
+        expiresAt: data.expiresAt || '',
+        workspaceId: data.workspaceId || data.workspace?.id || '',
+      });
+    }
+    return {
+      userId: data.userId,
+      verticalId: data.verticalId,
+      selectedAt: data.selectedAt,
+    };
   }
 
   async getSelectedVertical(): Promise<UserVertical | null> {
@@ -461,6 +486,52 @@ class ApiService {
     const data = await this.handleResponse<WorkspaceSessionResponse>(response);
     this.applyWorkspaceSession(data);
     return data;
+  }
+
+  async getWorkspacePreferences(): Promise<WorkspacePreferencesSnapshot> {
+    const response = await fetch(`${API_BASE_URL}/workspaces/preferences`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    const data = await this.handleResponse<WorkspacePreferencesSnapshot>(response);
+    setCachedWorkspacePreferences(data, this.getAuthUserId());
+    return data;
+  }
+
+  async updateWorkspacePreferences(input: {
+    businessName?: string;
+    preferences?: {
+      timezone?: string;
+      language?: string;
+      notifications?: { email?: boolean; push?: boolean; sms?: boolean };
+    };
+  }): Promise<WorkspacePreferencesSnapshot> {
+    const response = await fetch(`${API_BASE_URL}/workspaces/preferences`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify(input),
+    });
+    const data = await this.handleResponse<WorkspacePreferencesSnapshot>(response);
+    setCachedWorkspacePreferences(data, this.getAuthUserId());
+    return data;
+  }
+
+  /**
+   * Ensure active workspace, then load business preferences into local cache (SCRUM-32).
+   */
+  async hydrateWorkspacePreferences(
+    preferredWorkspaceId?: string | null
+  ): Promise<WorkspacePreferencesSnapshot | null> {
+    try {
+      await this.ensureActiveWorkspace(preferredWorkspaceId);
+      if (!this.isAuthenticated() || !this.readWorkspaceIdFromToken(this.getAuthToken() || '')) {
+        return null;
+      }
+      return await this.getWorkspacePreferences();
+    } catch (error) {
+      console.error('Failed to hydrate workspace preferences:', error);
+      return null;
+    }
   }
 
   /**
@@ -822,7 +893,7 @@ class ApiService {
     unitCost?: number | null
     supplier?: string
     location?: string
-    description?: string
+    description?: string | null
     avatar?: string | null
     customFields?: Record<string, unknown>
   }): Promise<Asset> {
@@ -847,7 +918,7 @@ class ApiService {
       unitCost?: number | null
       supplier?: string
       location?: string
-      description?: string
+      description?: string | null
       avatar?: string | null
       customFields?: Record<string, unknown>
     }
@@ -861,12 +932,34 @@ class ApiService {
     return normalizeAsset(data);
   }
 
-  async deleteAsset(assetId: string) {
+  async archiveAsset(assetId: string) {
     const response = await fetch(`${API_BASE_URL}/assets/${assetId}`, {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
+  }
+
+  async getArchivedAssets(): Promise<Asset[]> {
+    const response = await fetch(`${API_BASE_URL}/assets/archived`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    const data = await this.handleResponse<unknown>(response);
+    return asAssetList(data).map(normalizeAsset);
+  }
+
+  async permanentlyDeleteAsset(assetId: string) {
+    const response = await fetch(`${API_BASE_URL}/assets/archived/${assetId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    });
+    return this.handleResponse(response);
+  }
+
+  /** @deprecated Use archiveAsset — DELETE soft-archives the asset. */
+  async deleteAsset(assetId: string) {
+    return this.archiveAsset(assetId);
   }
 
   async getObjectTypes(): Promise<ObjectType[]> {
@@ -1048,6 +1141,7 @@ class ApiService {
     sessionStorage.removeItem('authToken');
     sessionStorage.removeItem('authUserId');
     clearActiveWorkspaceId();
+    clearCachedWorkspacePreferences();
     clearObjectTypesCache();
     if (hadToken && options?.notify !== false) {
       notifyAuthSessionChanged();

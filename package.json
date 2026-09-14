@@ -10,6 +10,7 @@
     "db:check": "node db/scripts/check-database.cjs",
     "db:test": "node db/scripts/test-supabase.cjs",
     "db:rls-test": "node db/scripts/test-tenant-isolation.cjs",
+    "db:seed": "node db/scripts/seed-demo.cjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",

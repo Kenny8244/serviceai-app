@@ -424,20 +424,34 @@ CREATE POLICY attachments_delete_member ON public.attachments
   USING (public.is_workspace_member(workspace_id));
 
 -- ── audit_logs ────────────────────────────────────────────────────────────────
--- Prefer workspace_id when present; otherwise own rows or objects in member workspaces.
+-- Schema varies by migration history: workspace_id, profile_id, user_id, or entity-only.
+-- Trigger inserts use log_object_changes() (SECURITY DEFINER) below.
 
 DROP POLICY IF EXISTS audit_logs_select_member ON public.audit_logs;
 DROP POLICY IF EXISTS audit_logs_insert_member ON public.audit_logs;
 
 DO $$
+DECLARE
+  has_workspace_id boolean;
+  has_profile_id boolean;
+  has_user_id boolean;
 BEGIN
-  IF EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'audit_logs'
-      AND column_name = 'workspace_id'
-  ) THEN
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'audit_logs' AND column_name = 'workspace_id'
+  ) INTO has_workspace_id;
+
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'audit_logs' AND column_name = 'profile_id'
+  ) INTO has_profile_id;
+
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'audit_logs' AND column_name = 'user_id'
+  ) INTO has_user_id;
+
+  IF has_workspace_id THEN
     EXECUTE $policy$
       CREATE POLICY audit_logs_select_member ON public.audit_logs
         FOR SELECT TO authenticated
@@ -448,7 +462,24 @@ BEGIN
         FOR INSERT TO authenticated
         WITH CHECK (public.is_workspace_member(workspace_id))
     $policy$;
-  ELSE
+  ELSIF has_profile_id THEN
+    EXECUTE $policy$
+      CREATE POLICY audit_logs_select_member ON public.audit_logs
+        FOR SELECT TO authenticated
+        USING (
+          profile_id = auth.uid()
+          OR (
+            entity_type IN ('objects', 'object')
+            AND public.object_in_member_workspace(entity_id)
+          )
+        )
+    $policy$;
+    EXECUTE $policy$
+      CREATE POLICY audit_logs_insert_member ON public.audit_logs
+        FOR INSERT TO authenticated
+        WITH CHECK (profile_id IS NULL OR profile_id = auth.uid())
+    $policy$;
+  ELSIF has_user_id THEN
     EXECUTE $policy$
       CREATE POLICY audit_logs_select_member ON public.audit_logs
         FOR SELECT TO authenticated
@@ -460,11 +491,28 @@ BEGIN
           )
         )
     $policy$;
-    -- Allow inserts from triggers / authenticated writers for own actions
     EXECUTE $policy$
       CREATE POLICY audit_logs_insert_member ON public.audit_logs
         FOR INSERT TO authenticated
         WITH CHECK (user_id IS NULL OR user_id = auth.uid())
+    $policy$;
+  ELSE
+    -- MVP schema: log_id, action, entity_type, entity_id, old_values, new_values, created_at
+    EXECUTE $policy$
+      CREATE POLICY audit_logs_select_member ON public.audit_logs
+        FOR SELECT TO authenticated
+        USING (
+          entity_type IN ('objects', 'object')
+          AND public.object_in_member_workspace(entity_id)
+        )
+    $policy$;
+    EXECUTE $policy$
+      CREATE POLICY audit_logs_insert_member ON public.audit_logs
+        FOR INSERT TO authenticated
+        WITH CHECK (
+          entity_type IN ('objects', 'object')
+          AND public.object_in_member_workspace(entity_id)
+        )
     $policy$;
   END IF;
 END $$;

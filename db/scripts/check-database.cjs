@@ -220,6 +220,25 @@ async function checkDatabase() {
         }
     }
 
+    console.log('\nService request model (SCRUM-43):');
+    {
+        const { error } = await supabase
+            .from('service_requests')
+            .select(
+                'ticket_id, workspace_id, title, description, category, priority, status, related_asset_object_id, created_at, updated_at',
+                { head: true, count: 'exact' }
+            );
+        if (error) {
+            failed = true;
+            console.log(`   FAIL AC columns: ${error.message}`);
+            console.log('         Apply db/migrations/20260914160000_scrum43_service_request_model.sql');
+        } else {
+            console.log(
+                '   OK   title / category / related_asset_object_id / workspace_id / priority / status / timestamps'
+            );
+        }
+    }
+
     console.log('\nRow Level Security (SCRUM-29):');
     {
         const { data, error } = await supabase.rpc('check_core_rls_status');
@@ -253,6 +272,7 @@ async function checkDatabase() {
         console.log('then db/migrations/20260909000000_scrum33_object_type_seed.sql');
         console.log('then db/migrations/20260909120000_scrum34_object_type_attributes.sql');
         console.log('then db/migrations/20260911000000_tenant_rls.sql in the SQL Editor.');
+        console.log('then db/migrations/20260914160000_scrum43_service_request_model.sql');
         console.log('After RLS: npm run db:rls-test');
         process.exit(1);
     }

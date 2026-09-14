@@ -259,6 +259,73 @@ describe('AssetDetailPage', () => {
     expect(screen.getByText('Reorder when at or below 3')).toBeInTheDocument()
   })
 
+  it('blocks invalid edit when name is empty', async () => {
+    vi.spyOn(apiService, 'getAssetById').mockResolvedValue(sample)
+    mockObjectTypes()
+    const updateAsset = vi.spyOn(apiService, 'updateAsset').mockResolvedValue(sample)
+    renderDetail('/assets/obj-1')
+
+    await screen.findByRole('heading', { name: 'Walk-in cooler' })
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Asset' })
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: '   ' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('Name is required.')).toBeInTheDocument()
+    expect(updateAsset).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: 'Edit Asset' })).toBeInTheDocument()
+  })
+
+  it('clears description through updateAsset', async () => {
+    const updated: Asset = { ...sample, description: null }
+    vi.spyOn(apiService, 'getAssetById').mockResolvedValue(sample)
+    mockObjectTypes()
+    const updateAsset = vi.spyOn(apiService, 'updateAsset').mockResolvedValue(updated)
+    renderDetail('/assets/obj-1')
+
+    await screen.findByRole('heading', { name: 'Walk-in cooler' })
+    expect(screen.getByText('Cold storage unit')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Asset' })
+    fireEvent.change(screen.getByLabelText(/description/i), { target: { value: '' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Edit Asset' })).not.toBeInTheDocument()
+    })
+    expect(updateAsset).toHaveBeenCalledWith(
+      'obj-1',
+      expect.objectContaining({
+        description: '',
+      })
+    )
+    expect(screen.queryByText('Cold storage unit')).not.toBeInTheDocument()
+  })
+
+  it('still allows edit save when object-type refresh fails but seeded types exist', async () => {
+    const updated: Asset = { ...sample, name: 'Walk-in cooler v2' }
+    vi.spyOn(apiService, 'getAssetById').mockResolvedValue(sample)
+    vi.spyOn(apiService, 'getObjectTypes')
+      .mockResolvedValueOnce(objectTypes)
+      .mockRejectedValue(new Error('Types unavailable'))
+    const updateAsset = vi.spyOn(apiService, 'updateAsset').mockResolvedValue(updated)
+    renderDetail('/assets/obj-1')
+
+    await screen.findByRole('heading', { name: 'Walk-in cooler' })
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Asset' })
+    await waitFor(() => {
+      expect(within(dialog).getByText(/types unavailable/i)).toBeInTheDocument()
+    })
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'Walk-in cooler v2' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(updateAsset).toHaveBeenCalled()
+    })
+    expect(await screen.findByRole('heading', { name: 'Walk-in cooler v2' })).toBeInTheDocument()
+  })
+
   it('shows boolean and text schema values on the detail page', async () => {
     vi.spyOn(apiService, 'getAssetById').mockResolvedValue(ingredient)
     mockObjectTypes()
@@ -330,28 +397,29 @@ describe('AssetDetailPage', () => {
     expect(screen.getByLabelText(/^temperature/i)).toHaveValue(null)
   })
 
-  it('asks for confirmation before deleting and returns to the list', async () => {
+  it('asks for confirmation before archiving and returns to the list', async () => {
     vi.spyOn(apiService, 'getAssetById').mockResolvedValue(sample)
     mockObjectTypes()
-    const deleteAsset = vi.spyOn(apiService, 'deleteAsset').mockResolvedValue({ success: true })
+    const archiveAsset = vi.spyOn(apiService, 'archiveAsset').mockResolvedValue({ success: true })
     renderDetail('/assets/obj-1')
 
     await screen.findByRole('heading', { name: 'Walk-in cooler' })
-    fireEvent.click(screen.getByRole('button', { name: /delete asset/i }))
+    fireEvent.click(screen.getByRole('button', { name: /archive asset/i }))
 
-    const dialog = await screen.findByRole('dialog', { name: 'Delete asset?' })
+    const dialog = await screen.findByRole('dialog', { name: 'Archive asset?' })
     expect(dialog).toHaveTextContent('Walk-in cooler')
+    expect(dialog).toHaveTextContent(/hidden from your active list/i)
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('dialog', { name: 'Delete asset?' })).not.toBeInTheDocument()
-    expect(deleteAsset).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: 'Archive asset?' })).not.toBeInTheDocument()
+    expect(archiveAsset).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: /delete asset/i }))
-    const confirmDialog = await screen.findByRole('dialog', { name: 'Delete asset?' })
-    fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: /archive asset/i }))
+    const confirmDialog = await screen.findByRole('dialog', { name: 'Archive asset?' })
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Archive' }))
 
     expect(await screen.findByTestId('location')).toHaveTextContent('/assets')
-    expect(deleteAsset).toHaveBeenCalledWith('obj-1')
+    expect(archiveAsset).toHaveBeenCalledWith('obj-1')
   })
 
   it('handles a missing asset with a not-found state', async () => {

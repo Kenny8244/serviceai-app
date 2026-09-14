@@ -8,8 +8,17 @@ import { FormField, nativeSelectClassName } from '@/components/ui/form-field'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { PageShell } from '@/components/layout/PageShell'
 import { SettingsNav } from '@/components/settings/SettingsNav'
+import { ErrorState } from '@/components/ui/error-state'
+import { LoadingState } from '@/components/ui/loading-state'
+import { SuccessBanner } from '@/components/ui/success-banner'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { clearSelectedVertical, getSelectedVertical } from '@/lib/verticalStorage'
 import { getVerticalDisplayName } from '@/lib/verticalContent'
+import {
+  DEFAULT_WORKSPACE_PREFERENCES,
+  getCachedWorkspacePreferences,
+} from '@/lib/workspacePreferencesStorage'
+import { toUserMessage } from '@/lib/userFacingError'
 import { apiService } from '@/services/api'
 import {
   Settings as SettingsIcon,
@@ -52,13 +61,9 @@ export function Settings() {
   const [settings, setSettings] = useState({
     // General Settings
     companyName: 'Your Business',
-    timezone: 'America/New_York',
-    language: 'en',
-    notifications: {
-      email: true,
-      push: false,
-      sms: false
-    },
+    timezone: DEFAULT_WORKSPACE_PREFERENCES.timezone,
+    language: DEFAULT_WORKSPACE_PREFERENCES.language,
+    notifications: { ...DEFAULT_WORKSPACE_PREFERENCES.notifications },
 
     // AI Configuration
     aiEnabled: true,
@@ -81,6 +86,11 @@ export function Settings() {
     requireApproval: true,
     maxTeamSize: 50
   })
+  const [prefsLoading, setPrefsLoading] = useState(true)
+  const [prefsError, setPrefsError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     const section = searchParams.get('section')
@@ -88,6 +98,53 @@ export function Settings() {
       setActiveSection(section)
     }
   }, [searchParams])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const applySnapshot = (snapshot: {
+      businessName: string
+      preferences: {
+        timezone: string
+        language: string
+        notifications: { email: boolean; push: boolean; sms: boolean }
+      }
+    }) => {
+      setSettings((prev) => ({
+        ...prev,
+        companyName: snapshot.businessName || prev.companyName,
+        timezone: snapshot.preferences.timezone,
+        language: snapshot.preferences.language,
+        notifications: { ...snapshot.preferences.notifications },
+      }))
+    }
+
+    const cached = getCachedWorkspacePreferences(apiService.getAuthUserId())
+    if (cached) {
+      applySnapshot(cached)
+      setPrefsLoading(false)
+    }
+
+    ;(async () => {
+      try {
+        const snapshot = await apiService.getWorkspacePreferences()
+        if (cancelled) return
+        applySnapshot(snapshot)
+        setPrefsError(null)
+      } catch (error) {
+        if (cancelled) return
+        if (!cached) {
+          setPrefsError(toUserMessage(error))
+        }
+      } finally {
+        if (!cancelled) setPrefsLoading(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const selectSection = (sectionId: string) => {
     setActiveSection(sectionId)
@@ -98,14 +155,55 @@ export function Settings() {
     }
   }
 
-  const handleSave = () => {
-    // TODO: Save settings to backend/localStorage
-    console.log('Settings saved:', settings)
+  const handleSave = async () => {
+    setSaving(true)
+    setSaveError(null)
+    setSaveSuccess(false)
+    try {
+      const snapshot = await apiService.updateWorkspacePreferences({
+        businessName: settings.companyName,
+        preferences: {
+          timezone: settings.timezone,
+          language: settings.language,
+          notifications: settings.notifications,
+        },
+      })
+      setSettings((prev) => ({
+        ...prev,
+        companyName: snapshot.businessName,
+        timezone: snapshot.preferences.timezone,
+        language: snapshot.preferences.language,
+        notifications: { ...snapshot.preferences.notifications },
+      }))
+      setSaveSuccess(true)
+    } catch (error) {
+      setSaveError(toUserMessage(error))
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleReset = () => {
-    // TODO: Reset to defaults
-    console.log('Settings reset to defaults')
+  const handleReset = async () => {
+    setSaving(true)
+    setSaveError(null)
+    setSaveSuccess(false)
+    try {
+      const snapshot = await apiService.updateWorkspacePreferences({
+        preferences: { ...DEFAULT_WORKSPACE_PREFERENCES },
+      })
+      setSettings((prev) => ({
+        ...prev,
+        companyName: snapshot.businessName,
+        timezone: snapshot.preferences.timezone,
+        language: snapshot.preferences.language,
+        notifications: { ...snapshot.preferences.notifications },
+      }))
+      setSaveSuccess(true)
+    } catch (error) {
+      setSaveError(toUserMessage(error))
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleLogout = () => {
@@ -130,7 +228,15 @@ export function Settings() {
       title: 'General Settings',
       description: 'Basic application preferences',
       icon: <SettingsIcon className="h-5 w-5" />,
-      content: (
+      content: prefsLoading ? (
+        <LoadingState label="Loading preferences…" />
+      ) : prefsError ? (
+        <ErrorState
+          title="Could not load preferences"
+          message={prefsError}
+          onRetry={() => window.location.reload()}
+        />
+      ) : (
         <div className="space-y-6">
           {/* Company Info */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -154,6 +260,19 @@ export function Settings() {
                 <option value="America/Chicago">Central Time</option>
                 <option value="America/Denver">Mountain Time</option>
                 <option value="America/Los_Angeles">Pacific Time</option>
+              </select>
+            </FormField>
+
+            <FormField label="Language" htmlFor="language">
+              <select
+                id="language"
+                value={settings.language}
+                onChange={(e) => setSettings(prev => ({ ...prev, language: e.target.value }))}
+                className={nativeSelectClassName}
+              >
+                <option value="en">English</option>
+                <option value="es">Spanish</option>
+                <option value="fr">French</option>
               </select>
             </FormField>
           </div>
@@ -636,17 +755,30 @@ export function Settings() {
       compact
       actions={
         <>
-          <Button variant="outline" onClick={handleReset}>
+          <Button variant="outline" onClick={handleReset} disabled={saving || prefsLoading || Boolean(prefsError)}>
             <RotateCcw className="h-4 w-4 mr-2" />
             Reset
           </Button>
-          <Button onClick={handleSave}>
+          <Button onClick={handleSave} disabled={saving || prefsLoading || Boolean(prefsError)}>
             <Save className="h-4 w-4 mr-2" />
-            Save Changes
+            {saving ? 'Saving…' : 'Save Changes'}
           </Button>
         </>
       }
     >
+        <div className="space-y-4">
+          {saveSuccess ? (
+            <SuccessBanner onDismiss={() => setSaveSuccess(false)}>
+              Preferences saved.
+            </SuccessBanner>
+          ) : null}
+          {saveError ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{saveError}</AlertDescription>
+            </Alert>
+          ) : null}
+
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           <div className="lg:col-span-1">
             <SettingsNav
@@ -687,6 +819,7 @@ export function Settings() {
               </CardContent>
             </Card>
           </div>
+        </div>
         </div>
     </PageShell>
   )

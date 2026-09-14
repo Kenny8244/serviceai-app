@@ -331,7 +331,7 @@ const DEMO: RegisterInput = {
   phoneNumber: '+1 (555) 123-4567',
   jobTitle: 'Demo Manager',
   companySize: '11-50',
-  industry: 'technology',
+  industry: 'multi',
 }
 
 export async function ensureDemoAccount(env: Env): Promise<AuthAccount> {

@@ -25,7 +25,7 @@ export function AppHeader({
       className={cn(
         'border-b',
         flush
-          ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+          ? 'bg-white dark:bg-card border-slate-200 dark:border-border'
           : 'bg-card border-border'
       )}
     >

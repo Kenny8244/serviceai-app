@@ -28,31 +28,37 @@
 }
 
 .dark {
-  --background: hsl(0, 0%, 3.9%);
-  --foreground: hsl(0, 0%, 98%);
-  --card: hsl(0, 0%, 3.9%);
-  --card-foreground: hsl(0, 0%, 98%);
-  --popover: hsl(0, 0%, 3.9%);
-  --popover-foreground: hsl(0, 0%, 98%);
-  --primary: hsl(0, 0%, 98%);
-  --primary-foreground: hsl(0, 0%, 9%);
-  --secondary: hsl(0, 0%, 14.9%);
-  --secondary-foreground: hsl(0, 0%, 98%);
-  --muted: hsl(0, 0%, 14.9%);
-  --muted-foreground: hsl(0, 0%, 63.9%);
-  --accent: hsl(0, 0%, 14.9%);
-  --accent-foreground: hsl(0, 0%, 98%);
-  --destructive: hsl(0, 62.8%, 30.6%);
+  /* Cohesive navy surfaces — clearer elevation, softer accents */
+  --background: hsl(222, 47%, 6%);
+  --foreground: hsl(210, 30%, 93%);
+  --card: hsl(222, 40%, 10%);
+  --card-foreground: hsl(210, 30%, 93%);
+  --popover: hsl(222, 40%, 10%);
+  --popover-foreground: hsl(210, 30%, 93%);
+  --primary: hsl(213, 78%, 58%);
+  --primary-foreground: hsl(222, 47%, 8%);
+  --secondary: hsl(220, 28%, 14%);
+  --secondary-foreground: hsl(210, 30%, 93%);
+  --muted: hsl(220, 28%, 14%);
+  --muted-foreground: hsl(215, 14%, 58%);
+  --accent: hsl(220, 28%, 16%);
+  --accent-foreground: hsl(210, 30%, 93%);
+  --destructive: hsl(0, 70%, 55%);
   --destructive-foreground: hsl(0, 0%, 98%);
-  --border: hsl(0, 0%, 14.9%);
-  --input: hsl(0, 0%, 14.9%);
-  --ring: hsl(0, 83.1%, 53.1%);
+  --border: hsl(220, 20%, 16%);
+  --input: hsl(220, 20%, 16%);
+  --ring: hsl(213, 78%, 58%);
 }
 
-/* Remove forced dark theme - let Tailwind handle it */
 body {
-  background: hsl(var(--background));
-  color: hsl(var(--foreground));
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.dark .shadow-sm {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.35),
+    0 0 0 1px rgb(255 255 255 / 0.04);
 }
 
 @theme inline {

@@ -15,6 +15,7 @@ import {
   TeamManagement,
   AssetsPage,
   AssetsImportPage,
+  AssetsManagePage,
   AssetDetailPage,
 } from "@/pages"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -43,11 +44,11 @@ async function persistVertical(verticalId: string) {
   }
 }
 
-async function restoreActiveWorkspace(preferredWorkspaceId?: string | null) {
+async function hydratePreferences(preferredWorkspaceId?: string | null) {
   try {
-    await apiService.ensureActiveWorkspace(preferredWorkspaceId)
+    await apiService.hydrateWorkspacePreferences(preferredWorkspaceId)
   } catch (error) {
-    console.error("Failed to restore active workspace:", error)
+    console.error("Failed to hydrate workspace preferences:", error)
   }
 }
 
@@ -70,11 +71,15 @@ function AuthRoute() {
   const navigate = useNavigate()
   const isAuthenticated = useIsAuthenticated()
 
-  const continueAfterAuth = async (response: AuthResponse, options?: { isNewAccount?: boolean }) => {
+  const continueAfterAuth = async (
+    response: AuthResponse,
+    options?: { isNewAccount?: boolean; forceVerticalSelection?: boolean }
+  ) => {
     const userId = response.user.id
-    await restoreActiveWorkspace(response.workspaceId)
+    await hydratePreferences(response.workspaceId)
 
-    if (options?.isNewAccount) {
+    // Demo (and new signups) always pick a vertical — that's the point of the demo flow.
+    if (options?.forceVerticalSelection || options?.isNewAccount) {
       clearSelectedVertical()
       navigate("/vertical-selection", { replace: true })
       return
@@ -141,7 +146,7 @@ function SavedSessionRedirect() {
     if (!isAuthenticated) return
     const userId = apiService.getAuthUserId()
     const preferred = getActiveWorkspaceId(userId)
-    void restoreActiveWorkspace(preferred)
+    void hydratePreferences(preferred)
   }, [isAuthenticated])
 
   return (
@@ -158,7 +163,7 @@ function RequireAuth() {
   useEffect(() => {
     if (!isAuthenticated) return
     const userId = apiService.getAuthUserId()
-    void restoreActiveWorkspace(getActiveWorkspaceId(userId))
+    void hydratePreferences(getActiveWorkspaceId(userId))
   }, [isAuthenticated])
 
   if (!isAuthenticated) {
@@ -187,6 +192,7 @@ export default function RouterApp() {
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/assets/import" element={<AssetsImportPage />} />
+              <Route path="/assets/manage" element={<AssetsManagePage />} />
               <Route path="/assets/:id" element={<AssetDetailPage />} />
               <Route path="/assets" element={<AssetsPage />} />
               <Route path="/settings" element={<Settings />} />

@@ -174,7 +174,8 @@ function AssetsPage() {
       case 'LOW':
         return 'warning' as const
       case 'OUT':
-        return 'destructive' as const
+
+      return 'destructive' as const
     }
   }
 

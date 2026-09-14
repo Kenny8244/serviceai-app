@@ -15,13 +15,14 @@ import {
 import {
   VERTICALS,
   createUser,
+  ensureDemoServiceRequestSeed,
   findUserByEmail,
   findUserById,
   listServiceRequests,
   saveServiceRequests,
   selectVertical,
 } from './lib/store'
-import { AssetsHttpError, createWorkspaceAsset, deleteWorkspaceAsset, getWorkspaceAsset, listWorkspaceAssets, updateWorkspaceAsset } from './lib/assets'
+import { AssetsHttpError, archiveWorkspaceAsset, createWorkspaceAsset, getWorkspaceAsset, listArchivedWorkspaceAssets, listWorkspaceAssets, permanentlyDeleteWorkspaceAsset, updateWorkspaceAsset } from './lib/assets'
 import {
   createWorkspaceObjectType,
   listWorkspaceObjectTypes,
@@ -32,7 +33,10 @@ import {
   WorkspacesHttpError,
   assertWorkspaceMembership,
   completeOnboardingWorkspace,
+  findWorkspaceForVertical,
+  getWorkspacePreferences,
   listWorkspacesForUser,
+  updateWorkspacePreferences,
 } from './lib/workspaces'
 import { isValidVerticalId, resolveUserVertical, saveTenantVertical } from './lib/tenantVertical'
 import { getSupabaseConfigStatus } from './lib/supabase'
@@ -240,6 +244,7 @@ app.post('/api/auth/demo', async (c) => {
   if (hasSupabaseLogin(c.env)) {
     try {
       const account = await ensureDemoAccount(c.env)
+      await ensureDemoServiceRequestSeed(c.env.DEMO_KV, account.id)
       const token = await generateToken(c.env, {
         userId: account.id,
         email: account.email,
@@ -279,7 +284,7 @@ app.post('/api/auth/demo', async (c) => {
       phoneNumber: '+1 (555) 123-4567',
       jobTitle: 'Demo Manager',
       companySize: '11-50',
-      industry: 'technology',
+      industry: 'multi',
       passwordHash: await hashPassword('demo123'),
       createdAt: now,
       updatedAt: now,
@@ -287,6 +292,7 @@ app.post('/api/auth/demo', async (c) => {
     await createUser(c.env.DEMO_KV, user)
   }
 
+  await ensureDemoServiceRequestSeed(c.env.DEMO_KV, user.id)
   const token = await generateToken(c.env, { userId: user.id, email: user.email })
   const selectedVertical = await resolveUserVertical(c.env, c.env.DEMO_KV, user.id)
   return c.json({ user: publicUser(user), token, expiresAt: getTokenExpiration(), selectedVertical })
@@ -303,6 +309,33 @@ app.post('/api/verticals/select', requireAuth, async (c) => {
   const user = c.get('user')
   const selected = await selectVertical(c.env.DEMO_KV, user.userId, verticalId)
   await saveTenantVertical(c.env, user.organizationId, verticalId)
+
+  // SCRUM-30: if demo has a workspace tagged for this vertical, activate it
+  if (hasSupabaseLogin(c.env)) {
+    try {
+      const workspace = await findWorkspaceForVertical(c.env, user.userId, verticalId)
+      if (workspace) {
+        const token = await generateToken(c.env, {
+          userId: user.userId,
+          email: user.email,
+          organizationId: workspace.tenantId || user.organizationId,
+          workspaceId: workspace.id,
+        })
+        return c.json({
+          ...selected,
+          token,
+          expiresAt: getTokenExpiration(),
+          workspaceId: workspace.id,
+          workspace,
+        })
+      }
+    } catch (error) {
+      if (!(error instanceof WorkspacesHttpError && error.status === 503)) {
+        console.error('Vertical workspace switch failed:', error)
+      }
+    }
+  }
+
   return c.json(selected)
 })
 
@@ -372,6 +405,49 @@ app.post('/api/workspaces/active', requireAuth, async (c) => {
       expiresAt: getTokenExpiration(),
       workspaceId: workspace.id,
     })
+  } catch (error) {
+    const handled = handleDomainError(error)
+    if (handled) return c.json({ error: handled.error }, handled.status)
+    throw error
+  }
+})
+
+app.get('/api/workspaces/preferences', requireAuth, async (c) => {
+  try {
+    const user = c.get('user')
+    const workspaceId = user.workspaceId?.trim()
+    if (!workspaceId) {
+      return c.json({ error: 'Active workspace is required. Select a workspace first.' }, 400)
+    }
+    const preferences = await getWorkspacePreferences(c.env, user.userId, workspaceId)
+    return c.json(preferences)
+  } catch (error) {
+    const handled = handleDomainError(error)
+    if (handled) return c.json({ error: handled.error }, handled.status)
+    throw error
+  }
+})
+
+app.put('/api/workspaces/preferences', requireAuth, async (c) => {
+  try {
+    const user = c.get('user')
+    const workspaceId = user.workspaceId?.trim()
+    if (!workspaceId) {
+      return c.json({ error: 'Active workspace is required. Select a workspace first.' }, 400)
+    }
+    const body = await c.req.json<{
+      businessName?: string
+      preferences?: {
+        timezone?: string
+        language?: string
+        notifications?: { email?: boolean; push?: boolean; sms?: boolean }
+      }
+    }>()
+    const preferences = await updateWorkspacePreferences(c.env, user.userId, workspaceId, {
+      businessName: body.businessName,
+      preferences: body.preferences,
+    })
+    return c.json(preferences)
   } catch (error) {
     const handled = handleDomainError(error)
     if (handled) return c.json({ error: handled.error }, handled.status)
@@ -560,6 +636,30 @@ app.get('/api/assets', requireAuth, async (c) => {
   }
 })
 
+app.get('/api/assets/archived', requireAuth, async (c) => {
+  try {
+    const user = c.get('user')
+    const assets = await listArchivedWorkspaceAssets(c.env, user.userId, user.workspaceId)
+    return c.json(assets)
+  } catch (error) {
+    const handled = handleDomainError(error)
+    if (handled) return c.json({ error: handled.error }, handled.status)
+    throw error
+  }
+})
+
+app.delete('/api/assets/archived/:id', requireAuth, async (c) => {
+  try {
+    const user = c.get('user')
+    await permanentlyDeleteWorkspaceAsset(c.env, user.userId, c.req.param('id'), user.workspaceId)
+    return c.json({ success: true })
+  } catch (error) {
+    const handled = handleDomainError(error)
+    if (handled) return c.json({ error: handled.error }, handled.status)
+    throw error
+  }
+})
+
 app.get('/api/assets/:id', requireAuth, async (c) => {
   try {
     const user = c.get('user')
@@ -586,7 +686,12 @@ function assetInputFromBody(body: Record<string, unknown>) {
     unitCost: body.unitCost == null || body.unitCost === '' ? null : Number(body.unitCost),
     supplier: typeof body.supplier === 'string' ? body.supplier : null,
     location: typeof body.location === 'string' ? body.location : null,
-    description: typeof body.description === 'string' ? body.description : null,
+    // undefined = omit (keep previous on update); string/null = set/clear
+    description: !Object.prototype.hasOwnProperty.call(body, 'description')
+      ? undefined
+      : typeof body.description === 'string'
+        ? body.description
+        : null,
     avatar: typeof body.avatar === 'string' ? body.avatar : null,
     customFields: customFieldsRaw && typeof customFieldsRaw === 'object' && !Array.isArray(customFieldsRaw)
       ? (customFieldsRaw as Record<string, unknown>)
@@ -629,7 +734,7 @@ app.put('/api/assets/:id', requireAuth, async (c) => {
 app.delete('/api/assets/:id', requireAuth, async (c) => {
   try {
     const user = c.get('user')
-    await deleteWorkspaceAsset(c.env, user.userId, c.req.param('id'), user.workspaceId)
+    await archiveWorkspaceAsset(c.env, user.userId, c.req.param('id'), user.workspaceId)
     return c.json({ success: true })
   } catch (error) {
     const handled = handleDomainError(error)

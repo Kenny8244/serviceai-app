@@ -55,10 +55,12 @@ function MetricCard({ stat }: { stat: DashboardStat }) {
       <CardContent className="p-6 h-full flex items-center">
         <div className="flex w-full items-center justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{stat.label}</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 truncate">{stat.value}</p>
+            <p className="text-sm font-medium text-slate-600 dark:text-muted-foreground">{stat.label}</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-foreground truncate">{stat.value}</p>
           </div>
-          <IconComponent className="h-8 w-8 text-blue-600 shrink-0 block" />
+          <div className="rounded-lg bg-transparent dark:bg-muted p-0 dark:p-2.5 shrink-0">
+            <IconComponent className="h-8 w-8 dark:h-5 dark:w-5 text-blue-600 dark:text-blue-400 block" />
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -119,7 +121,7 @@ export function Dashboard() {
       icon={<GradientIcon icon={VerticalIcon} />}
       actions={
         <>
-          <Badge variant="secondary" className="bg-green-100 text-green-800">
+          <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border dark:border-emerald-800/60">
             <Sparkles className="h-3 w-3 mr-1" />
             ServiceAI Active
           </Badge>
@@ -194,15 +196,15 @@ export function Dashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg text-slate-900 dark:text-slate-100">Recent Activity</CardTitle>
-                  <CardDescription className="text-slate-600 dark:text-slate-400">
+                  <CardTitle className="text-lg text-slate-900 dark:text-foreground">Recent Activity</CardTitle>
+                  <CardDescription className="text-slate-600 dark:text-muted-foreground">
                     {vertical.name} updates and service requests
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {overview.activities.length === 0 ? (
                     <EmptyState
-                      icon={<Inbox className="h-6 w-6 text-slate-500" />}
+                      icon={<Inbox className="h-6 w-6 text-slate-500 dark:text-muted-foreground" />}
                       title="No recent activity yet"
                       description="Import data or create a service request to see updates here."
                       className="py-8"
@@ -211,14 +213,14 @@ export function Dashboard() {
                     <div className="space-y-4">
                       {overview.activities.map((item) => (
                         <div key={item.title} className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center flex-shrink-0">
-                            <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                          <div className="w-8 h-8 bg-green-100 dark:bg-emerald-500/10 rounded-full flex items-center justify-center flex-shrink-0">
+                            <CheckCircle className="h-4 w-4 text-green-600 dark:text-emerald-400" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            <p className="text-sm font-medium text-slate-900 dark:text-foreground">
                               {item.title}
                             </p>
-                            <p className="text-xs text-slate-600 dark:text-slate-400">
+                            <p className="text-xs text-slate-600 dark:text-muted-foreground">
                               {item.detail}
                             </p>
                           </div>
@@ -231,21 +233,21 @@ export function Dashboard() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg flex items-center leading-normal text-slate-900 dark:text-slate-100">
-                    <Sparkles className="h-5 w-5 mr-2 text-blue-600 shrink-0" />
+                  <CardTitle className="text-lg flex items-center leading-normal text-slate-900 dark:text-foreground">
+                    <Sparkles className="h-5 w-5 mr-2 text-blue-600 dark:text-blue-400 shrink-0" />
                     AI Recommendation
                   </CardTitle>
-                  <CardDescription className="text-slate-600 dark:text-slate-400">
+                  <CardDescription className="text-slate-600 dark:text-muted-foreground">
                     Suggested next step for this workspace
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {overview.aiRecommendation ? (
                     <div>
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      <p className="text-sm font-medium text-slate-900 dark:text-foreground">
                         {overview.aiRecommendation.title}
                       </p>
-                      <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                      <p className="text-sm text-slate-600 dark:text-muted-foreground mt-1">
                         {overview.aiRecommendation.detail}
                       </p>
                     </div>

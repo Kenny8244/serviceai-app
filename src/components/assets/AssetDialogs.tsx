@@ -180,7 +180,8 @@ export function AssetFormDialog({
       unitCost: typeof customFields.unit_cost === 'number' ? customFields.unit_cost : null,
       supplier: typeof customFields.supplier === 'string' ? customFields.supplier : undefined,
       location: typeof customFields.location === 'string' ? customFields.location : undefined,
-      description: description.trim() || undefined,
+      // Always send so edit can clear an existing description
+      description: description.trim(),
       avatar: avatar.trim() || null,
       customFields,
     }
@@ -206,7 +207,7 @@ export function AssetFormDialog({
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
       role="presentation"
       onMouseDown={(event: MouseEvent<HTMLDivElement>) => {
-        if (event.target === event.currentTarget) onClose()
+        if (event.target === event.currentTarget && !saving) onClose()
       }}
     >
       <Card
@@ -331,7 +332,12 @@ export function AssetFormDialog({
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
               Cancel
             </Button>
-            <Button type="submit" disabled={saving || typesLoading || !objectTypeId || Boolean(typesError)}>
+            <Button
+              type="submit"
+              disabled={
+                saving || typesLoading || !objectTypeId || (objectTypes.length === 0 && Boolean(typesError))
+              }
+            >
               {saving ? 'Saving…' : 'Save'}
             </Button>
           </div>
@@ -341,7 +347,62 @@ export function AssetFormDialog({
   )
 }
 
-export function DeleteAssetDialog({
+export function ArchiveAssetDialog({
+  asset,
+  onClose,
+  onArchived,
+}: {
+  asset: Asset
+  onClose: () => void
+  onArchived: (assetId: string) => void
+}) {
+  const [archiving, setArchiving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const confirmArchive = async () => {
+    try {
+      setArchiving(true)
+      setError(null)
+      await apiService.archiveAsset(asset.id)
+      onArchived(asset.id)
+    } catch (err) {
+      setError(toUserMessage(err))
+    } finally {
+      setArchiving(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+      role="presentation"
+      onMouseDown={(event: MouseEvent<HTMLDivElement>) => {
+        if (event.target === event.currentTarget && !archiving) onClose()
+      }}
+    >
+      <Card role="dialog" aria-labelledby="archive-asset-title" className="w-full max-w-md p-6">
+        <h2 id="archive-asset-title" className="text-lg font-semibold">
+          Archive asset?
+        </h2>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+          “{asset.name}” will be hidden from your active list. Linked relationships will be
+          disconnected so they no longer appear with this asset.
+        </p>
+        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+        <div className="mt-6 flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose} disabled={archiving}>
+            Cancel
+          </Button>
+          <Button type="button" variant="destructive" onClick={() => void confirmArchive()} disabled={archiving}>
+            {archiving ? 'Archiving…' : 'Archive'}
+          </Button>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+export function PermanentDeleteAssetDialog({
   asset,
   onClose,
   onDeleted,
@@ -357,7 +418,7 @@ export function DeleteAssetDialog({
     try {
       setDeleting(true)
       setError(null)
-      await apiService.deleteAsset(asset.id)
+      await apiService.permanentlyDeleteAsset(asset.id)
       onDeleted(asset.id)
     } catch (err) {
       setError(toUserMessage(err))
@@ -374,12 +435,12 @@ export function DeleteAssetDialog({
         if (event.target === event.currentTarget && !deleting) onClose()
       }}
     >
-      <Card role="dialog" aria-labelledby="delete-asset-title" className="w-full max-w-md p-6">
-        <h2 id="delete-asset-title" className="text-lg font-semibold">
-          Delete asset?
+      <Card role="dialog" aria-labelledby="permanent-delete-asset-title" className="w-full max-w-md p-6">
+        <h2 id="permanent-delete-asset-title" className="text-lg font-semibold">
+          Delete forever?
         </h2>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-          “{asset.name}” will be removed from your list. This cannot be undone.
+          “{asset.name}” will be permanently removed from the archive. This cannot be undone.
         </p>
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
         <div className="mt-6 flex justify-end gap-2">
@@ -387,7 +448,7 @@ export function DeleteAssetDialog({
             Cancel
           </Button>
           <Button type="button" variant="destructive" onClick={() => void confirmDelete()} disabled={deleting}>
-            {deleting ? 'Deleting…' : 'Delete'}
+            {deleting ? 'Deleting…' : 'Delete forever'}
           </Button>
         </div>
       </Card>

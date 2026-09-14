@@ -68,6 +68,10 @@ test('assets list shows live workspace data and an Add Asset action', async ({ p
   await expect(page.getByRole('heading', { name: editedName })).toBeVisible()
   await expect(page.getByText('Back room').first()).toBeVisible()
 
+  await page.reload()
+  await expect(page.getByRole('heading', { name: editedName })).toBeVisible()
+  await expect(page.getByText('Back room').first()).toBeVisible()
+
   await page.getByRole('button', { name: 'Edit' }).click()
   await expect(page.getByRole('dialog', { name: 'Edit Asset' })).toBeVisible()
   await expect(page.getByLabel(/location/i)).toHaveValue('Back room')

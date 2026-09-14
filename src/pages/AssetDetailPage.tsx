@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ClipboardList, Package, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, Archive, ClipboardList, Package, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState, SkeletonBlock } from '@/components/ui/loading-state'
 import { PageShell } from '@/components/layout/PageShell'
-import { AssetAvatar, AssetFormDialog, DeleteAssetDialog } from '@/components/assets/AssetDialogs'
+import { AssetAvatar, AssetFormDialog, ArchiveAssetDialog } from '@/components/assets/AssetDialogs'
 import { getSelectedVertical } from '@/lib/verticalStorage'
 import { getVerticalContent } from '@/lib/verticalContent'
 import { toUserMessage } from '@/lib/userFacingError'
@@ -57,7 +57,7 @@ function AssetDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [archiveOpen, setArchiveOpen] = useState(false)
 
   const loadAsset = useCallback(async () => {
     if (!id) {
@@ -155,11 +155,11 @@ function AssetDetailPage() {
                 </Button>
                 <button
                   type="button"
-                  aria-label="Delete asset"
-                  onClick={() => setDeleteOpen(true)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-700 transition-colors hover:bg-red-100 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/30"
+                  aria-label="Archive asset"
+                  onClick={() => setArchiveOpen(true)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300 dark:hover:bg-slate-900/60"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Archive className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -241,12 +241,12 @@ function AssetDetailPage() {
           }}
         />
       ) : null}
-      {deleteOpen && asset ? (
-        <DeleteAssetDialog
+      {archiveOpen && asset ? (
+        <ArchiveAssetDialog
           asset={asset}
-          onClose={() => setDeleteOpen(false)}
-          onDeleted={() => {
-            setDeleteOpen(false)
+          onClose={() => setArchiveOpen(false)}
+          onArchived={() => {
+            setArchiveOpen(false)
             navigate('/assets')
           }}
         />
