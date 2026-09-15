@@ -56,6 +56,25 @@ function statusVariant(status: ServiceRequest['status']) {
   }
 }
 
+function RelatedAssetValue({
+  relatedAssetId,
+  relatedAssetName,
+}: {
+  relatedAssetId: string | null
+  relatedAssetName: string | null
+}) {
+  if (!relatedAssetId) return 'None — can be linked later'
+
+  return (
+    <Link
+      to={`/assets/${relatedAssetId}`}
+      className="text-slate-900 underline-offset-2 hover:underline dark:text-slate-100"
+    >
+      {relatedAssetName || 'Related asset'}
+    </Link>
+  )
+}
+
 function ServiceRequestDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -123,6 +142,8 @@ function ServiceRequestDetailPage() {
         <ErrorState
           title="Service request not found"
           message="This request may have been removed or the link is invalid."
+          onRetry={() => navigate('/service-requests')}
+          retryLabel="Back to list"
         />
       ) : error ? (
         <ErrorState title="Couldn't load service request" message={error} onRetry={() => void loadRequest()} />
@@ -155,16 +176,10 @@ function ServiceRequestDetailPage() {
               <DetailItem
                 label="Related asset"
                 value={
-                  request.relatedAssetId && request.relatedAssetName ? (
-                    <Link
-                      to={`/assets/${request.relatedAssetId}`}
-                      className="text-slate-900 underline-offset-2 hover:underline dark:text-slate-100"
-                    >
-                      {request.relatedAssetName}
-                    </Link>
-                  ) : (
-                    'None — can be linked later'
-                  )
+                  <RelatedAssetValue
+                    relatedAssetId={request.relatedAssetId}
+                    relatedAssetName={request.relatedAssetName}
+                  />
                 }
               />
               <DetailItem label="Priority" value={request.priority} />
