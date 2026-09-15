@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Archive, ClipboardList, Package, Pencil } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, Archive, ClipboardList, Package, Pencil, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -9,10 +9,11 @@ import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState, SkeletonBlock } from '@/components/ui/loading-state'
 import { PageShell } from '@/components/layout/PageShell'
 import { AssetAvatar, AssetFormDialog, ArchiveAssetDialog } from '@/components/assets/AssetDialogs'
+import { ServiceRequestFormDialog } from '@/components/service-requests/ServiceRequestDialogs'
 import { getSelectedVertical } from '@/lib/verticalStorage'
 import { getVerticalContent } from '@/lib/verticalContent'
 import { toUserMessage } from '@/lib/userFacingError'
-import { apiService, type Asset, type ObjectType } from '@/services/api'
+import { apiService, type Asset, type ObjectType, type ServiceRequest } from '@/services/api'
 import {
   attributeValueFromAsset,
   assetHasQuantityField,
@@ -58,6 +59,10 @@ function AssetDetailPage() {
   const [notFound, setNotFound] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const [requestFormOpen, setRequestFormOpen] = useState(false)
+  const [relatedRequests, setRelatedRequests] = useState<ServiceRequest[]>([])
+  const [relatedLoading, setRelatedLoading] = useState(false)
+  const [relatedError, setRelatedError] = useState<string | null>(null)
 
   const loadAsset = useCallback(async () => {
     if (!id) {
@@ -95,9 +100,34 @@ function AssetDetailPage() {
     }
   }, [id])
 
+  const loadRelatedRequests = useCallback(async (assetId: string) => {
+    try {
+      setRelatedLoading(true)
+      setRelatedError(null)
+      const { serviceRequests } = await apiService.getServiceRequests()
+      setRelatedRequests(
+        serviceRequests.filter((request) => request.relatedAssetId === assetId)
+      )
+    } catch (err) {
+      setRelatedError(toUserMessage(err))
+      setRelatedRequests([])
+    } finally {
+      setRelatedLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     void loadAsset()
   }, [loadAsset])
+
+  useEffect(() => {
+    if (!asset?.id) {
+      setRelatedRequests([])
+      setRelatedError(null)
+      return
+    }
+    void loadRelatedRequests(asset.id)
+  }, [asset?.id, loadRelatedRequests])
 
   const selectedType = objectTypes.find((type) => type.id === asset?.objectTypeId)
   const selectedSchema = selectedType?.attributes ?? []
@@ -143,6 +173,15 @@ function AssetDetailPage() {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRequestFormOpen(true)}
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Create request
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
@@ -196,12 +235,53 @@ function AssetDetailPage() {
 
             <Card className="p-6">
               <h3 className="font-medium mb-4">Related service requests</h3>
-              <EmptyState
-                icon={<ClipboardList className="h-6 w-6 text-slate-500" />}
-                title="No service requests yet"
-                description="Service requests linked to this asset will appear here."
-                className="py-8"
-              />
+              {relatedLoading ? (
+                <LoadingState variant="skeleton" label="Loading related requests" className="space-y-2">
+                  <SkeletonBlock className="h-4 w-2/3" />
+                  <SkeletonBlock className="h-4 w-1/2" />
+                </LoadingState>
+              ) : relatedError ? (
+                <ErrorState
+                  title="Couldn't load related requests"
+                  message={relatedError}
+                  onRetry={() => {
+                    if (asset?.id) void loadRelatedRequests(asset.id)
+                  }}
+                  className="py-6"
+                />
+              ) : relatedRequests.length === 0 ? (
+                <EmptyState
+                  icon={<ClipboardList className="h-6 w-6 text-slate-500" />}
+                  title="No service requests yet"
+                  description="Service requests linked to this asset will appear here."
+                  className="py-8"
+                  action={
+                    <Button type="button" variant="outline" size="sm" onClick={() => setRequestFormOpen(true)}>
+                      <Plus className="mr-1.5 h-4 w-4" />
+                      Create request
+                    </Button>
+                  }
+                />
+              ) : (
+                <ul className="space-y-2">
+                  {relatedRequests.map((request) => (
+                    <li key={request.id}>
+                      <Link
+                        to={`/service-requests/${request.id}`}
+                        className="flex items-center justify-between gap-3 rounded-md border border-transparent px-2 py-2 text-sm hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-slate-900/40"
+                      >
+                        <span className="min-w-0 truncate font-medium text-slate-900 underline-offset-2 hover:underline dark:text-slate-100">
+                          {request.title}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <Badge variant="outline">{request.priority}</Badge>
+                          <Badge variant="secondary">{request.status.replace('_', ' ')}</Badge>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </Card>
           </div>
 
@@ -248,6 +328,17 @@ function AssetDetailPage() {
           onArchived={() => {
             setArchiveOpen(false)
             navigate('/assets')
+          }}
+        />
+      ) : null}
+      {requestFormOpen && asset ? (
+        <ServiceRequestFormDialog
+          defaultRelatedAssetId={asset.id}
+          defaultRelatedAssetName={asset.name}
+          onClose={() => setRequestFormOpen(false)}
+          onSaved={(saved) => {
+            setRequestFormOpen(false)
+            navigate(`/service-requests/${saved.id}`)
           }}
         />
       ) : null}

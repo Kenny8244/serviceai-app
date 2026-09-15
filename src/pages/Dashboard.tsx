@@ -18,6 +18,7 @@ import {
   BarChart3,
   Building2,
   CheckCircle,
+  ClipboardList,
   Inbox,
   Package,
   ShoppingBag,
@@ -141,8 +142,8 @@ export function Dashboard() {
             <Package className="h-4 w-4 mr-2 shrink-0 block" />
             {vertical.addAssetLabel}
           </Button>
-          <Button variant="outline" size="sm" disabled title="Coming soon">
-            <Users className="h-4 w-4 mr-2 shrink-0 block" />
+          <Button variant="outline" size="sm" onClick={() => navigate('/service-requests?create=1')}>
+            <ClipboardList className="h-4 w-4 mr-2 shrink-0 block" />
             {vertical.serviceRequestLabel}
           </Button>
         </div>

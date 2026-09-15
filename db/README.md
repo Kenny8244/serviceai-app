@@ -24,16 +24,14 @@ What it creates (idempotent — safe to re-run):
 - Per workspace: object types + themed sample assets (`custom_fields.source = "scrum-30-seed"`)
 - Per workspace: sample Postgres `service_requests` (SCRUM-43 columns: title, category, related_asset_object_id)
 
-**How to try it:** Try Demo → pick a vertical → active workspace switches to that vertical’s seed → Assets shows the matching inventory.
-
-**Service requests in the app UI:** `/api/service-requests` still uses Worker `DEMO_KV`. On **Try Demo**, the Worker ensures sample requests for each vertical in KV. Postgres rows from `db:seed` are for DB/dev inspection and future migration.
+**How to try it:** Try Demo → pick a vertical → active workspace switches to that vertical’s seed → Assets shows the matching inventory. Service Requests (`/service-requests`) loads live Postgres rows for that workspace via `/api/service-requests`.
 
 Verify:
 
 1. `npm run db:seed` (twice — second run should skip duplicates).
 2. `npm run dev` → Try Demo → choose Restaurant → Assets shows kitchen samples.
 3. Choose Retail (re-enter vertical flow or select again) → Assets shows retail samples.
-4. Service requests API/UI shows samples after demo login.
+4. Open **Service Requests** — seeded tickets appear; Create Request persists after refresh.
 
 ## Tenant RLS (SCRUM-29)
 

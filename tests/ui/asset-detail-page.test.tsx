@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AssetDetailPage from '@/pages/AssetDetailPage'
-import { apiService, type Asset, type ObjectType } from '@/services/api'
+import { apiService, type Asset, type ObjectType, type ServiceRequest } from '@/services/api'
 
 const sample: Asset = {
   id: 'obj-1',
@@ -145,6 +145,7 @@ function renderDetail(path: string) {
       <Routes>
         <Route path="/assets/:id" element={<AssetDetailPage />} />
         <Route path="/assets" element={<LocationProbe />} />
+        <Route path="/service-requests/:id" element={<LocationProbe />} />
       </Routes>
     </MemoryRouter>
   )
@@ -152,6 +153,10 @@ function renderDetail(path: string) {
 
 function mockObjectTypes() {
   vi.spyOn(apiService, 'getObjectTypes').mockResolvedValue(objectTypes)
+}
+
+function mockRelatedRequests(serviceRequests: ServiceRequest[] = []) {
+  vi.spyOn(apiService, 'getServiceRequests').mockResolvedValue({ serviceRequests })
 }
 
 afterEach(() => {
@@ -163,6 +168,7 @@ describe('AssetDetailPage', () => {
   it('shows core and dynamic attributes for a loaded asset', async () => {
     vi.spyOn(apiService, 'getAssetById').mockResolvedValue(sample)
     mockObjectTypes()
+    mockRelatedRequests()
     renderDetail('/assets/obj-1')
 
     expect(await screen.findByRole('heading', { name: 'Walk-in cooler' })).toBeInTheDocument()
@@ -173,6 +179,7 @@ describe('AssetDetailPage', () => {
     expect(screen.getByText('ACTIVE')).toBeInTheDocument()
     expect(screen.getByText('Related service requests')).toBeInTheDocument()
     expect(screen.getByText('No service requests yet')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Create request' }).length).toBeGreaterThanOrEqual(1)
   })
 
   it('flags the asset as LOW when quantity is at or below the reorder threshold', async () => {
@@ -187,6 +194,7 @@ describe('AssetDetailPage', () => {
       },
     })
     mockObjectTypes()
+    mockRelatedRequests()
     renderDetail('/assets/obj-1')
 
     expect(await screen.findByText('LOW')).toBeInTheDocument()
@@ -206,6 +214,7 @@ describe('AssetDetailPage', () => {
       customFields: { location: 'Dock', temperature: -18, capacity: 400 },
     })
     mockObjectTypes()
+    mockRelatedRequests()
     renderDetail('/assets/obj-fz')
 
     expect(await screen.findByRole('heading', { name: 'Walk-in freezer' })).toBeInTheDocument()
@@ -228,6 +237,7 @@ describe('AssetDetailPage', () => {
     }
     vi.spyOn(apiService, 'getAssetById').mockResolvedValue(sample)
     mockObjectTypes()
+    mockRelatedRequests()
     const updateAsset = vi.spyOn(apiService, 'updateAsset').mockResolvedValue(updated)
     renderDetail('/assets/obj-1')
 
@@ -262,6 +272,7 @@ describe('AssetDetailPage', () => {
   it('blocks invalid edit when name is empty', async () => {
     vi.spyOn(apiService, 'getAssetById').mockResolvedValue(sample)
     mockObjectTypes()
+    mockRelatedRequests()
     const updateAsset = vi.spyOn(apiService, 'updateAsset').mockResolvedValue(sample)
     renderDetail('/assets/obj-1')
 
@@ -280,6 +291,7 @@ describe('AssetDetailPage', () => {
     const updated: Asset = { ...sample, description: null }
     vi.spyOn(apiService, 'getAssetById').mockResolvedValue(sample)
     mockObjectTypes()
+    mockRelatedRequests()
     const updateAsset = vi.spyOn(apiService, 'updateAsset').mockResolvedValue(updated)
     renderDetail('/assets/obj-1')
 
@@ -308,6 +320,7 @@ describe('AssetDetailPage', () => {
     vi.spyOn(apiService, 'getObjectTypes')
       .mockResolvedValueOnce(objectTypes)
       .mockRejectedValue(new Error('Types unavailable'))
+    mockRelatedRequests()
     const updateAsset = vi.spyOn(apiService, 'updateAsset').mockResolvedValue(updated)
     renderDetail('/assets/obj-1')
 
@@ -329,6 +342,7 @@ describe('AssetDetailPage', () => {
   it('shows boolean and text schema values on the detail page', async () => {
     vi.spyOn(apiService, 'getAssetById').mockResolvedValue(ingredient)
     mockObjectTypes()
+    mockRelatedRequests()
     renderDetail('/assets/obj-ing')
 
     expect(await screen.findByRole('heading', { name: 'Flour 00' })).toBeInTheDocument()
@@ -339,6 +353,7 @@ describe('AssetDetailPage', () => {
   it('opens the edit form with the selected asset values', async () => {
     vi.spyOn(apiService, 'getAssetById').mockResolvedValue(sample)
     mockObjectTypes()
+    mockRelatedRequests()
     renderDetail('/assets/obj-1')
 
     await screen.findByRole('heading', { name: 'Walk-in cooler' })
@@ -357,6 +372,7 @@ describe('AssetDetailPage', () => {
   it('reloads boolean and text schema values in the edit form', async () => {
     vi.spyOn(apiService, 'getAssetById').mockResolvedValue(ingredient)
     mockObjectTypes()
+    mockRelatedRequests()
     renderDetail('/assets/obj-ing')
 
     await screen.findByRole('heading', { name: 'Flour 00' })
@@ -371,6 +387,7 @@ describe('AssetDetailPage', () => {
   it('loads text schema values for note assets in the edit form', async () => {
     vi.spyOn(apiService, 'getAssetById').mockResolvedValue(noteAsset)
     mockObjectTypes()
+    mockRelatedRequests()
     renderDetail('/assets/obj-note')
 
     expect(await screen.findByText('Keep dry')).toBeInTheDocument()
@@ -386,6 +403,7 @@ describe('AssetDetailPage', () => {
   it('does not copy previous type values when the object type changes', async () => {
     vi.spyOn(apiService, 'getAssetById').mockResolvedValue(sample)
     mockObjectTypes()
+    mockRelatedRequests()
     renderDetail('/assets/obj-1')
 
     await screen.findByRole('heading', { name: 'Walk-in cooler' })
@@ -400,6 +418,7 @@ describe('AssetDetailPage', () => {
   it('asks for confirmation before archiving and returns to the list', async () => {
     vi.spyOn(apiService, 'getAssetById').mockResolvedValue(sample)
     mockObjectTypes()
+    mockRelatedRequests()
     const archiveAsset = vi.spyOn(apiService, 'archiveAsset').mockResolvedValue({ success: true })
     renderDetail('/assets/obj-1')
 
@@ -420,6 +439,80 @@ describe('AssetDetailPage', () => {
 
     expect(await screen.findByTestId('location')).toHaveTextContent('/assets')
     expect(archiveAsset).toHaveBeenCalledWith('obj-1')
+  })
+
+  it('opens create request with the current asset preselected and allows cancel', async () => {
+    vi.spyOn(apiService, 'getAssetById').mockResolvedValue(sample)
+    mockObjectTypes()
+    mockRelatedRequests()
+    vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample])
+    const createServiceRequest = vi.spyOn(apiService, 'createServiceRequest')
+    renderDetail('/assets/obj-1')
+
+    await screen.findByRole('heading', { name: 'Walk-in cooler' })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Create request' })[0])
+
+    const dialog = await screen.findByRole('dialog', { name: 'Create Request' })
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText(/related/i)).toHaveValue('obj-1')
+    })
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog', { name: 'Create Request' })).not.toBeInTheDocument()
+    expect(createServiceRequest).not.toHaveBeenCalled()
+  })
+
+  it('creates a request from asset detail and navigates to the new request', async () => {
+    const created: ServiceRequest = {
+      id: 'sr-new',
+      userId: 'user-1',
+      workspaceId: 'ws-1',
+      title: 'Cooler alarm',
+      description: 'Beeping overnight',
+      category: 'Equipment',
+      priority: 'high',
+      status: 'open',
+      relatedAssetId: 'obj-1',
+      relatedAssetName: 'Walk-in cooler',
+      createdAt: new Date('2026-09-14T00:00:00.000Z'),
+      updatedAt: new Date('2026-09-14T00:00:00.000Z'),
+    }
+    vi.spyOn(apiService, 'getAssetById').mockResolvedValue(sample)
+    mockObjectTypes()
+    mockRelatedRequests()
+    vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample])
+    const createServiceRequest = vi
+      .spyOn(apiService, 'createServiceRequest')
+      .mockResolvedValue({ serviceRequest: created })
+    renderDetail('/assets/obj-1')
+
+    await screen.findByRole('heading', { name: 'Walk-in cooler' })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Create request' })[0])
+
+    const dialog = await screen.findByRole('dialog', { name: 'Create Request' })
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText(/related/i)).toHaveValue('obj-1')
+    })
+    fireEvent.change(within(dialog).getByLabelText(/^title/i), { target: { value: 'Cooler alarm' } })
+    fireEvent.change(within(dialog).getByLabelText(/^description/i), {
+      target: { value: 'Beeping overnight' },
+    })
+    fireEvent.change(within(dialog).getByLabelText(/^category/i), { target: { value: 'Equipment' } })
+    fireEvent.change(within(dialog).getByLabelText(/^priority/i), { target: { value: 'high' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create Request' }))
+
+    await waitFor(() => {
+      expect(createServiceRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Cooler alarm',
+          description: 'Beeping overnight',
+          category: 'Equipment',
+          priority: 'high',
+          relatedAssetId: 'obj-1',
+        })
+      )
+    })
+    expect(await screen.findByTestId('location')).toHaveTextContent('/service-requests/sr-new')
   })
 
   it('handles a missing asset with a not-found state', async () => {

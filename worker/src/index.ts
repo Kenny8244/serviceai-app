@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { createMiddleware } from 'hono/factory'
-import type { Env, JwtPayload, ServiceRequest, StoredUser, Variables } from './types'
+import type { Env, JwtPayload, StoredUser, Variables } from './types'
 import { generateToken, getTokenExpiration, publicUser, verifyToken } from './lib/jwt'
 import { generateId, hashPassword, verifyPassword } from './lib/crypto'
 import {
@@ -18,11 +18,16 @@ import {
   ensureDemoServiceRequestSeed,
   findUserByEmail,
   findUserById,
-  listServiceRequests,
-  saveServiceRequests,
   selectVertical,
 } from './lib/store'
 import { AssetsHttpError, archiveWorkspaceAsset, createWorkspaceAsset, getWorkspaceAsset, listArchivedWorkspaceAssets, listWorkspaceAssets, permanentlyDeleteWorkspaceAsset, updateWorkspaceAsset } from './lib/assets'
+import {
+  ServiceRequestsHttpError,
+  createWorkspaceServiceRequest,
+  getWorkspaceServiceRequest,
+  listWorkspaceServiceRequests,
+  updateWorkspaceServiceRequest,
+} from './lib/serviceRequests'
 import {
   createWorkspaceObjectType,
   listWorkspaceObjectTypes,
@@ -497,77 +502,115 @@ app.post('/api/assistant/query', requireAuth, async (c) => {
 // ── Service Requests ──────────────────────────────────────────────────────────
 
 app.get('/api/service-requests', requireAuth, async (c) => {
-  const requests = await listServiceRequests(c.env.DEMO_KV, c.get('user').userId)
-  return c.json({ serviceRequests: requests })
+  try {
+    const user = c.get('user')
+    const serviceRequests = await listWorkspaceServiceRequests(c.env, user.userId, user.workspaceId)
+    return c.json({ serviceRequests })
+  } catch (error) {
+    const domain = handleDomainError(error)
+    if (domain) return c.json({ error: domain.error }, domain.status)
+    console.error('List service requests failed:', error)
+    return c.json({ error: 'Could not load service requests' }, 500)
+  }
 })
 
 app.post('/api/service-requests', requireAuth, async (c) => {
-  const userId = c.get('user').userId
-  const body = await c.req.json<{
-    verticalId?: string
-    title: string
-    description: string
-    category: string
-    priority?: ServiceRequest['priority']
-    attachments?: string[]
-  }>()
-  if (!body.title || !body.description || !body.category) {
-    return c.json({ error: 'Title, description, and category are required' }, 400)
+  try {
+    const user = c.get('user')
+    const body = await c.req.json<{
+      title?: string
+      description?: string
+      category?: string
+      priority?: string
+      status?: string
+      relatedAssetId?: string | null
+      related_asset_id?: string | null
+    }>()
+    const serviceRequest = await createWorkspaceServiceRequest(
+      c.env,
+      user.userId,
+      {
+        title: body.title || '',
+        description: body.description,
+        category: body.category || '',
+        priority: body.priority as 'low' | 'medium' | 'high' | 'urgent' | undefined,
+        status: body.status as 'open' | 'in_progress' | 'resolved' | 'closed' | undefined,
+        relatedAssetId: body.relatedAssetId ?? body.related_asset_id,
+      },
+      user.workspaceId
+    )
+    return c.json({ serviceRequest }, 201)
+  } catch (error) {
+    const domain = handleDomainError(error)
+    if (domain) return c.json({ error: domain.error }, domain.status)
+    console.error('Create service request failed:', error)
+    return c.json({ error: 'Could not create service request' }, 500)
   }
-
-  const now = new Date().toISOString()
-  const request: ServiceRequest = {
-    id: generateId(),
-    user_id: userId,
-    vertical_id: body.verticalId || 'retail',
-    title: body.title,
-    description: body.description,
-    category: body.category,
-    priority: body.priority || 'medium',
-    status: 'open',
-    attachments: body.attachments || [],
-    created_at: now,
-    updated_at: now,
-  }
-
-  const requests = await listServiceRequests(c.env.DEMO_KV, userId)
-  requests.unshift(request)
-  await saveServiceRequests(c.env.DEMO_KV, userId, requests)
-  return c.json({ serviceRequest: request }, 201)
 })
 
 app.get('/api/service-requests/:id', requireAuth, async (c) => {
-  const requests = await listServiceRequests(c.env.DEMO_KV, c.get('user').userId)
-  const request = requests.find((r) => r.id === c.req.param('id'))
-  if (!request) return c.json({ error: 'Service request not found' }, 404)
-  return c.json({ serviceRequest: request })
+  try {
+    const user = c.get('user')
+    const serviceRequest = await getWorkspaceServiceRequest(
+      c.env,
+      user.userId,
+      c.req.param('id'),
+      user.workspaceId
+    )
+    if (!serviceRequest) return c.json({ error: 'Service request not found' }, 404)
+    return c.json({ serviceRequest })
+  } catch (error) {
+    const domain = handleDomainError(error)
+    if (domain) return c.json({ error: domain.error }, domain.status)
+    console.error('Get service request failed:', error)
+    return c.json({ error: 'Could not load service request' }, 500)
+  }
 })
 
 app.patch('/api/service-requests/:id', requireAuth, async (c) => {
-  const userId = c.get('user').userId
-  const requests = await listServiceRequests(c.env.DEMO_KV, userId)
-  const index = requests.findIndex((r) => r.id === c.req.param('id'))
-  if (index === -1) return c.json({ error: 'Service request not found' }, 404)
-
-  const updates = await c.req.json<Partial<ServiceRequest>>()
-  requests[index] = {
-    ...requests[index],
-    ...updates,
-    updated_at: new Date().toISOString(),
-    resolved_at:
-      updates.status === 'resolved' || updates.status === 'closed'
-        ? new Date().toISOString()
-        : requests[index].resolved_at,
+  try {
+    const user = c.get('user')
+    const body = await c.req.json<{
+      title?: string
+      description?: string | null
+      category?: string
+      priority?: string
+      status?: string
+      relatedAssetId?: string | null
+      related_asset_id?: string | null
+    }>()
+    const serviceRequest = await updateWorkspaceServiceRequest(
+      c.env,
+      user.userId,
+      c.req.param('id'),
+      {
+        title: body.title,
+        description: body.description,
+        category: body.category,
+        priority: body.priority as 'low' | 'medium' | 'high' | 'urgent' | undefined,
+        status: body.status as 'open' | 'in_progress' | 'resolved' | 'closed' | undefined,
+        relatedAssetId:
+          body.relatedAssetId !== undefined || body.related_asset_id !== undefined
+            ? (body.relatedAssetId ?? body.related_asset_id)
+            : undefined,
+      },
+      user.workspaceId
+    )
+    return c.json({ serviceRequest })
+  } catch (error) {
+    const domain = handleDomainError(error)
+    if (domain) return c.json({ error: domain.error }, domain.status)
+    console.error('Update service request failed:', error)
+    return c.json({ error: 'Could not update service request' }, 500)
   }
-  await saveServiceRequests(c.env.DEMO_KV, userId, requests)
-  return c.json({ serviceRequest: requests[index] })
 })
 
 function handleDomainError(error: unknown) {
   if (
     error instanceof AssetsHttpError ||
     error instanceof ObjectTypesHttpError ||
-    error instanceof WorkspacesHttpError
+    error instanceof WorkspacesHttpError ||
+    error instanceof ServiceRequestsHttpError
   ) {
     return { error: error.message, status: error.status as 400 | 403 | 404 | 409 | 500 | 503 }
   }

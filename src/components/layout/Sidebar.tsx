@@ -18,6 +18,7 @@ import {
   MessageSquare,
   HelpCircle,
   ChevronRight,
+  ClipboardList,
 } from 'lucide-react'
 
 interface NavigationItem {
@@ -48,6 +49,7 @@ export function Sidebar({
   const navigate = useNavigate()
   const location = useLocation()
   const assetsLabel = getVerticalContent(getSelectedVertical()).navAssetsLabel
+  const serviceRequestsLabel = getVerticalContent(getSelectedVertical()).navServiceRequestsLabel
 
   const navigationItems: NavigationItem[] = [
     {
@@ -66,6 +68,12 @@ export function Sidebar({
         { id: 'manage', label: 'Manage Items', icon: <Package className="h-4 w-4" />, path: '/assets/manage' },
         { id: 'reports', label: 'Inventory Reports', icon: <BarChart3 className="h-4 w-4" />, path: '/assets/reports', disabled: true },
       ],
+    },
+    {
+      id: 'service-requests',
+      label: serviceRequestsLabel,
+      icon: <ClipboardList className="h-5 w-5" />,
+      path: '/service-requests',
     },
     {
       id: 'analytics',

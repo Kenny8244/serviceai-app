@@ -79,12 +79,15 @@ export interface LoginRequest {
 export interface ServiceRequest {
   id: string;
   userId: string;
-  verticalId: string;
+  workspaceId: string;
+  verticalId?: string;
   title: string;
   description: string;
   category: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   status: 'open' | 'in_progress' | 'resolved' | 'closed';
+  relatedAssetId: string | null;
+  relatedAssetName: string | null;
   attachments?: string[];
   createdAt: Date;
   updatedAt: Date;
@@ -135,12 +138,24 @@ export interface ServiceTicket {
 }
 
 export interface CreateServiceRequest {
-  verticalId: string;
   title: string;
-  description: string;
+  description?: string;
   category: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
+  status?: 'open' | 'in_progress' | 'resolved' | 'closed';
+  relatedAssetId?: string | null;
+  /** @deprecated optional; ignored by live API */
+  verticalId?: string;
   attachments?: string[];
+}
+
+export interface UpdateServiceRequest {
+  title?: string;
+  description?: string | null;
+  category?: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  status?: 'open' | 'in_progress' | 'resolved' | 'closed';
+  relatedAssetId?: string | null;
 }
 
 export interface Asset {
@@ -222,15 +237,23 @@ function pickRaw(obj: Record<string, unknown>, ...keys: string[]): unknown {
 function normalizeServiceRequest(rawValue: unknown): ServiceRequest {
   const raw = asRecord(rawValue)
   const resolvedAt = pickRaw(raw, 'resolvedAt', 'resolved_at')
+  const relatedAssetId = pickRaw(raw, 'relatedAssetId', 'related_asset_id', 'related_asset_object_id')
+  const relatedAssetName = pickRaw(raw, 'relatedAssetName', 'related_asset_name')
   return {
     id: String(raw.id ?? ''),
     userId: String(pickRaw(raw, 'userId', 'user_id') ?? ''),
-    verticalId: String(pickRaw(raw, 'verticalId', 'vertical_id') ?? ''),
+    workspaceId: String(pickRaw(raw, 'workspaceId', 'workspace_id') ?? ''),
+    verticalId: (() => {
+      const value = pickRaw(raw, 'verticalId', 'vertical_id')
+      return value == null || value === '' ? undefined : String(value)
+    })(),
     title: String(raw.title ?? ''),
     description: String(raw.description ?? ''),
     category: String(raw.category ?? ''),
     priority: (raw.priority as ServiceRequest['priority']) || 'medium',
     status: (raw.status as ServiceRequest['status']) || 'open',
+    relatedAssetId: relatedAssetId == null || relatedAssetId === '' ? null : String(relatedAssetId),
+    relatedAssetName: relatedAssetName == null || relatedAssetName === '' ? null : String(relatedAssetName),
     attachments: Array.isArray(raw.attachments) ? (raw.attachments as string[]) : [],
     createdAt: new Date(String(pickRaw(raw, 'createdAt', 'created_at') ?? Date.now())),
     updatedAt: new Date(String(pickRaw(raw, 'updatedAt', 'updated_at') ?? Date.now())),
@@ -607,6 +630,19 @@ class ApiService {
     const response = await fetch(`${API_BASE_URL}/service-requests/${id}`, {
       method: 'GET',
       headers: this.getAuthHeaders(),
+    });
+    const data = await this.handleResponse<{ serviceRequest: unknown }>(response);
+    return { serviceRequest: normalizeServiceRequest(data.serviceRequest) };
+  }
+
+  async updateServiceRequest(
+    id: string,
+    updates: UpdateServiceRequest
+  ): Promise<{ serviceRequest: ServiceRequest }> {
+    const response = await fetch(`${API_BASE_URL}/service-requests/${id}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify(updates),
     });
     const data = await this.handleResponse<{ serviceRequest: unknown }>(response);
     return { serviceRequest: normalizeServiceRequest(data.serviceRequest) };

@@ -38,12 +38,16 @@ export interface UserVertical {
 export interface ServiceRequest {
   id: string
   user_id: string
-  vertical_id: string
+  workspace_id?: string
+  /** @deprecated KV demo seed only; omitted for Supabase-backed rows */
+  vertical_id?: string
   title: string
   description: string
   category: string
   priority: 'low' | 'medium' | 'high' | 'urgent'
   status: 'open' | 'in_progress' | 'resolved' | 'closed'
+  related_asset_id?: string | null
+  related_asset_name?: string | null
   attachments?: string[]
   created_at: string
   updated_at: string

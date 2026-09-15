@@ -125,15 +125,17 @@ export async function ensureDemoServiceRequestSeed(kv: KVNamespace, userId: stri
     },
   ]
 
-  const missing = templates.filter((t) => !covered.has(t.vertical_id))
+  const missing = templates.filter((t) => t.vertical_id && !covered.has(t.vertical_id))
   if (missing.length === 0) return
 
   // If vertical already covered, skip all templates for that vertical (add full set only for missing verticals)
   const byVertical = new Map<string, typeof templates>()
   for (const t of missing) {
-    const list = byVertical.get(t.vertical_id) || []
+    const verticalId = t.vertical_id
+    if (!verticalId) continue
+    const list = byVertical.get(verticalId) || []
     list.push(t)
-    byVertical.set(t.vertical_id, list)
+    byVertical.set(verticalId, list)
   }
 
   const additions: ServiceRequest[] = []

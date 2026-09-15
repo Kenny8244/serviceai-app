@@ -17,6 +17,8 @@ import {
   AssetsImportPage,
   AssetsManagePage,
   AssetDetailPage,
+  ServiceRequestsPage,
+  ServiceRequestDetailPage,
 } from "@/pages"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { ThemeProvider } from "@/lib/theme"
@@ -195,6 +197,8 @@ export default function RouterApp() {
               <Route path="/assets/manage" element={<AssetsManagePage />} />
               <Route path="/assets/:id" element={<AssetDetailPage />} />
               <Route path="/assets" element={<AssetsPage />} />
+              <Route path="/service-requests/:id" element={<ServiceRequestDetailPage />} />
+              <Route path="/service-requests" element={<ServiceRequestsPage />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/ai-hub" element={<AIHub />} />
               <Route path="/analytics" element={<Analytics />} />
