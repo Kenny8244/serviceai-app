@@ -76,6 +76,11 @@ export interface LoginRequest {
   rememberMe?: boolean;
 }
 
+export interface ServiceRequestPerson {
+  id: string
+  name: string
+}
+
 export interface ServiceRequest {
   id: string;
   userId: string;
@@ -88,6 +93,8 @@ export interface ServiceRequest {
   status: 'open' | 'in_progress' | 'resolved' | 'closed';
   relatedAssetId: string | null;
   relatedAssetName: string | null;
+  owner: ServiceRequestPerson | null;
+  watchers: ServiceRequestPerson[];
   attachments?: string[];
   createdAt: Date;
   updatedAt: Date;
@@ -130,6 +137,7 @@ export interface ServiceTicket {
   status: 'open' | 'in_progress' | 'resolved' | 'closed'
   priority: 'low' | 'medium' | 'high' | 'urgent'
   assignee: string
+  watchers: string
   createdBy: string
   createdAt: Date
   updatedAt: Date
@@ -144,6 +152,8 @@ export interface CreateServiceRequest {
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   status?: 'open' | 'in_progress' | 'resolved' | 'closed';
   relatedAssetId?: string | null;
+  ownerId?: string | null;
+  watcherIds?: string[];
   /** @deprecated optional; ignored by live API */
   verticalId?: string;
   attachments?: string[];
@@ -156,6 +166,8 @@ export interface UpdateServiceRequest {
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   status?: 'open' | 'in_progress' | 'resolved' | 'closed';
   relatedAssetId?: string | null;
+  ownerId?: string | null;
+  watcherIds?: string[];
 }
 
 export interface Asset {
@@ -234,6 +246,21 @@ function pickRaw(obj: Record<string, unknown>, ...keys: string[]): unknown {
   return undefined
 }
 
+function normalizePerson(value: unknown): ServiceRequestPerson | null {
+  const raw = asRecord(value)
+  const id = String(pickRaw(raw, 'id') ?? '').trim()
+  if (!id) return null
+  const name = String(pickRaw(raw, 'name') ?? '').trim() || 'Member'
+  return { id, name }
+}
+
+function normalizePeople(value: unknown): ServiceRequestPerson[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map(normalizePerson)
+    .filter((person): person is ServiceRequestPerson => person != null)
+}
+
 function normalizeServiceRequest(rawValue: unknown): ServiceRequest {
   const raw = asRecord(rawValue)
   const resolvedAt = pickRaw(raw, 'resolvedAt', 'resolved_at')
@@ -254,6 +281,8 @@ function normalizeServiceRequest(rawValue: unknown): ServiceRequest {
     status: (raw.status as ServiceRequest['status']) || 'open',
     relatedAssetId: relatedAssetId == null || relatedAssetId === '' ? null : String(relatedAssetId),
     relatedAssetName: relatedAssetName == null || relatedAssetName === '' ? null : String(relatedAssetName),
+    owner: normalizePerson(pickRaw(raw, 'owner')),
+    watchers: normalizePeople(pickRaw(raw, 'watchers')),
     attachments: Array.isArray(raw.attachments) ? (raw.attachments as string[]) : [],
     createdAt: new Date(String(pickRaw(raw, 'createdAt', 'created_at') ?? Date.now())),
     updatedAt: new Date(String(pickRaw(raw, 'updatedAt', 'updated_at') ?? Date.now())),
@@ -602,6 +631,20 @@ class ApiService {
     if (workspaceId) {
       setActiveWorkspaceId(workspaceId, userId);
     }
+  }
+
+  async getWorkspaceMembers(): Promise<{ id: string; name: string; email: string }[]> {
+    const response = await fetch(`${API_BASE_URL}/workspace-members`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    const data = await this.handleResponse<{ members?: unknown[] }>(response);
+    return (data.members ?? []).flatMap((member) => {
+      const person = normalizePerson(member)
+      if (!person) return []
+      const email = String(pickRaw(asRecord(member), 'email') ?? '')
+      return [{ ...person, email }]
+    });
   }
 
   // Service Request endpoints

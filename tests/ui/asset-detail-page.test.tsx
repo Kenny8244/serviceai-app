@@ -446,6 +446,7 @@ describe('AssetDetailPage', () => {
     mockObjectTypes()
     mockRelatedRequests()
     vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample])
+    vi.spyOn(apiService, 'getWorkspaceMembers').mockResolvedValue([])
     const createServiceRequest = vi.spyOn(apiService, 'createServiceRequest')
     renderDetail('/assets/obj-1')
 
@@ -474,6 +475,8 @@ describe('AssetDetailPage', () => {
       status: 'open',
       relatedAssetId: 'obj-1',
       relatedAssetName: 'Walk-in cooler',
+      owner: null,
+      watchers: [],
       createdAt: new Date('2026-09-14T00:00:00.000Z'),
       updatedAt: new Date('2026-09-14T00:00:00.000Z'),
     }
@@ -481,6 +484,7 @@ describe('AssetDetailPage', () => {
     mockObjectTypes()
     mockRelatedRequests()
     vi.spyOn(apiService, 'getAssets').mockResolvedValue([sample])
+    vi.spyOn(apiService, 'getWorkspaceMembers').mockResolvedValue([])
     const createServiceRequest = vi
       .spyOn(apiService, 'createServiceRequest')
       .mockResolvedValue({ serviceRequest: created })

@@ -41,12 +41,14 @@ import {
 } from 'lucide-react'
 
 function mapRequestToTicket(request: ServiceRequest): ServiceTicket {
+  const watcherNames = (request.watchers ?? []).map((person) => person.name).filter(Boolean)
   return {
     id: request.id,
     title: request.title,
     status: request.status,
     priority: request.priority,
-    assignee: 'Unassigned',
+    assignee: request.owner?.name || 'Unassigned',
+    watchers: watcherNames.join(', '),
     createdBy: request.userId,
     createdAt: request.createdAt,
     updatedAt: request.updatedAt,
@@ -536,6 +538,7 @@ export function TeamManagement() {
                   <TableRow>
                     <TableHead>Title</TableHead>
                     <TableHead>Assignee</TableHead>
+                    <TableHead>Watchers</TableHead>
                     <TableHead>Priority</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Created</TableHead>
@@ -585,6 +588,7 @@ export function TeamManagement() {
                             ) : null}
                           </TableCell>
                           <TableCell>{ticket.assignee}</TableCell>
+                          <TableCell>{ticket.watchers || '—'}</TableCell>
                           <TableCell>
                             <Badge className={
                               ticket.priority === 'urgent' ? 'bg-red-100 text-red-800' :

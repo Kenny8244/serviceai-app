@@ -48,6 +48,8 @@ export interface ServiceRequest {
   status: 'open' | 'in_progress' | 'resolved' | 'closed'
   related_asset_id?: string | null
   related_asset_name?: string | null
+  owner?: { id: string; name: string } | null
+  watchers?: { id: string; name: string }[]
   attachments?: string[]
   created_at: string
   updated_at: string

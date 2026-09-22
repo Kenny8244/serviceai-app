@@ -4,7 +4,7 @@ import { resolvePreferredWorkspaceId } from './authAccount'
 import { getSupabaseAdmin, SUPABASE_CONFIG_HINT } from './supabase'
 
 const REQUEST_COLUMNS =
-  'ticket_id, workspace_id, title, description, category, type, priority, status, related_asset_object_id, created_by, created_at, updated_at, related_asset:objects!related_asset_object_id(object_id, name)'
+  'ticket_id, workspace_id, title, description, category, type, priority, status, related_asset_object_id, assignee, created_by, created_at, updated_at, related_asset:objects!related_asset_object_id(object_id, name)'
 
 export class ServiceRequestsHttpError extends Error {
   constructor(
@@ -22,6 +22,8 @@ export type CreateServiceRequestInput = {
   priority?: ServiceRequest['priority']
   status?: ServiceRequest['status']
   relatedAssetId?: string | null
+  ownerId?: string | null
+  watcherIds?: string[]
 }
 
 export type UpdateServiceRequestInput = {
@@ -31,6 +33,8 @@ export type UpdateServiceRequestInput = {
   priority?: ServiceRequest['priority']
   status?: ServiceRequest['status']
   relatedAssetId?: string | null
+  ownerId?: string | null
+  watcherIds?: string[]
 }
 
 type AssetRel = { object_id?: string | null; name?: string | null } | { object_id?: string | null; name?: string | null }[] | null
@@ -45,6 +49,7 @@ type ServiceRequestRow = {
   priority: string
   status: string
   related_asset_object_id: string | null
+  assignee?: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -109,7 +114,14 @@ function relatedAsset(rel: AssetRel): { id: string | null; name: string | null }
   return { id, name }
 }
 
-export function mapRowToServiceRequest(row: ServiceRequestRow, userId: string): ServiceRequest {
+export function mapRowToServiceRequest(
+  row: ServiceRequestRow,
+  userId: string,
+  people?: {
+    owner: { id: string; name: string } | null
+    watchers: { id: string; name: string }[]
+  }
+): ServiceRequest {
   const asset = relatedAsset(row.related_asset ?? null)
   return {
     id: row.ticket_id,
@@ -122,6 +134,8 @@ export function mapRowToServiceRequest(row: ServiceRequestRow, userId: string): 
     status: normalizeStatus(row.status),
     related_asset_id: asset.id || asString(row.related_asset_object_id),
     related_asset_name: asset.name,
+    owner: people?.owner ?? null,
+    watchers: people?.watchers ?? [],
     created_at: row.created_at,
     updated_at: row.updated_at,
   }
@@ -163,6 +177,152 @@ async function assertRelatedAssetInWorkspace(
   return relatedAssetId
 }
 
+type ProfileNameRow = {
+  id: string
+  full_name?: string | null
+  first_name?: string | null
+  last_name?: string | null
+  email?: string | null
+}
+
+function profileName(row: ProfileNameRow): string {
+  const combined = [row.first_name, row.last_name].filter(Boolean).join(' ').trim()
+  return combined || row.full_name?.trim() || row.email?.trim() || 'Member'
+}
+
+function uniqueIds(ids: string[]): string[] {
+  return [...new Set(ids.map((id) => id.trim()).filter(Boolean))]
+}
+
+async function assertWorkspaceMemberIds(
+  admin: SupabaseClient,
+  workspaceId: string,
+  ids: string[],
+  label: string
+): Promise<string[]> {
+  const unique = uniqueIds(ids)
+  if (unique.length === 0) return []
+
+  const { data, error } = await admin
+    .from('user_workspace_roles')
+    .select('profile_id')
+    .eq('workspace_id', workspaceId)
+    .in('profile_id', unique)
+
+  if (error) {
+    console.error(`Failed to validate ${label}:`, error.message)
+    throw new ServiceRequestsHttpError(`Could not validate ${label}.`, 500)
+  }
+
+  const found = new Set((data ?? []).map((row) => String(row.profile_id)))
+  if (unique.some((id) => !found.has(id))) {
+    throw new ServiceRequestsHttpError(`${label} must belong to this workspace.`, 400)
+  }
+  return unique
+}
+
+async function loadProfileNames(
+  admin: SupabaseClient,
+  ids: string[]
+): Promise<Map<string, string>> {
+  const unique = uniqueIds(ids)
+  const names = new Map<string, string>()
+  if (unique.length === 0) return names
+
+  const { data, error } = await admin
+    .from('profiles')
+    .select('id, full_name, first_name, last_name, email')
+    .in('id', unique)
+
+  if (error) {
+    console.error('Failed to load profile names:', error.message)
+    throw new ServiceRequestsHttpError('Could not load service request people.', 500)
+  }
+
+  for (const row of (data ?? []) as ProfileNameRow[]) {
+    names.set(String(row.id), profileName(row))
+  }
+  return names
+}
+
+async function replaceWatchers(
+  admin: SupabaseClient,
+  workspaceId: string,
+  ticketId: string,
+  watcherIds: string[]
+): Promise<void> {
+  const { error: deleteError } = await admin
+    .from('service_request_watchers')
+    .delete()
+    .eq('workspace_id', workspaceId)
+    .eq('ticket_id', ticketId)
+
+  if (deleteError) {
+    console.error('Failed to clear watchers:', deleteError.message)
+    throw new ServiceRequestsHttpError('Could not update watchers.', 500)
+  }
+
+  if (watcherIds.length === 0) return
+
+  const { error: insertError } = await admin.from('service_request_watchers').insert(
+    watcherIds.map((profileId) => ({
+      ticket_id: ticketId,
+      profile_id: profileId,
+      workspace_id: workspaceId,
+    }))
+  )
+
+  if (insertError) {
+    console.error('Failed to save watchers:', insertError.message)
+    throw new ServiceRequestsHttpError('Could not update watchers.', 500)
+  }
+}
+
+async function hydrateServiceRequests(
+  admin: SupabaseClient,
+  workspaceId: string,
+  rows: ServiceRequestRow[],
+  userId: string
+): Promise<ServiceRequest[]> {
+  if (rows.length === 0) return []
+
+  const ticketIds = rows.map((row) => row.ticket_id)
+  const { data: watcherRows, error } = await admin
+    .from('service_request_watchers')
+    .select('ticket_id, profile_id')
+    .eq('workspace_id', workspaceId)
+    .in('ticket_id', ticketIds)
+
+  if (error) {
+    console.error('Failed to load watchers:', error.message)
+    throw new ServiceRequestsHttpError('Could not load service requests.', 500)
+  }
+
+  const watchersByTicket = new Map<string, string[]>()
+  for (const row of watcherRows ?? []) {
+    const ticketId = String(row.ticket_id)
+    const profileId = String(row.profile_id)
+    const current = watchersByTicket.get(ticketId) ?? []
+    current.push(profileId)
+    watchersByTicket.set(ticketId, current)
+  }
+
+  const profileIds = [
+    ...rows.map((row) => asString(row.assignee) ?? ''),
+    ...(watcherRows ?? []).map((row) => String(row.profile_id)),
+  ]
+  const names = await loadProfileNames(admin, profileIds)
+
+  return rows.map((row) => {
+    const ownerId = asString(row.assignee)
+    const watcherIds = watchersByTicket.get(row.ticket_id) ?? []
+    return mapRowToServiceRequest(row, userId, {
+      owner: ownerId ? { id: ownerId, name: names.get(ownerId) || 'Member' } : null,
+      watchers: watcherIds.map((id) => ({ id, name: names.get(id) || 'Member' })),
+    })
+  })
+}
+
 export async function listWorkspaceServiceRequests(
   env: Env,
   userId: string,
@@ -182,7 +342,12 @@ export async function listWorkspaceServiceRequests(
     throw new ServiceRequestsHttpError('Could not load service requests.', 500)
   }
 
-  return ((data ?? []) as ServiceRequestRow[]).map((row) => mapRowToServiceRequest(row, userId))
+  return hydrateServiceRequests(
+    context.admin,
+    context.workspaceId,
+    (data ?? []) as ServiceRequestRow[],
+    userId
+  )
 }
 
 export async function getWorkspaceServiceRequest(
@@ -206,7 +371,13 @@ export async function getWorkspaceServiceRequest(
     throw new ServiceRequestsHttpError('Could not load service request.', 500)
   }
   if (!data) return null
-  return mapRowToServiceRequest(data as ServiceRequestRow, userId)
+  const [request] = await hydrateServiceRequests(
+    context.admin,
+    context.workspaceId,
+    [data as ServiceRequestRow],
+    userId
+  )
+  return request ?? null
 }
 
 export async function createWorkspaceServiceRequest(
@@ -233,6 +404,18 @@ export async function createWorkspaceServiceRequest(
     context.workspaceId,
     asString(input.relatedAssetId)
   )
+  const ownerId =
+    input.ownerId === undefined
+      ? userId
+      : input.ownerId
+        ? (await assertWorkspaceMemberIds(context.admin, context.workspaceId, [input.ownerId], 'Owner'))[0]
+        : null
+  const watcherIds = await assertWorkspaceMemberIds(
+    context.admin,
+    context.workspaceId,
+    input.watcherIds ?? [],
+    'Watchers'
+  )
 
   const { data, error } = await context.admin
     .from('service_requests')
@@ -246,7 +429,7 @@ export async function createWorkspaceServiceRequest(
       status,
       related_asset_object_id: relatedAssetId,
       created_by: userId,
-      assignee: userId,
+      assignee: ownerId,
     })
     .select(REQUEST_COLUMNS)
     .single()
@@ -256,7 +439,13 @@ export async function createWorkspaceServiceRequest(
     throw new ServiceRequestsHttpError('Could not create service request.', 500)
   }
 
-  return mapRowToServiceRequest(data as ServiceRequestRow, userId)
+  const created = data as ServiceRequestRow
+  await replaceWatchers(context.admin, context.workspaceId, created.ticket_id, watcherIds)
+  const [request] = await hydrateServiceRequests(context.admin, context.workspaceId, [created], userId)
+  if (!request) {
+    throw new ServiceRequestsHttpError('Could not create service request.', 500)
+  }
+  return request
 }
 
 export async function updateWorkspaceServiceRequest(
@@ -305,8 +494,18 @@ export async function updateWorkspaceServiceRequest(
       asString(input.relatedAssetId)
     )
   }
+  if (input.ownerId !== undefined) {
+    patch.assignee = input.ownerId
+      ? (await assertWorkspaceMemberIds(context.admin, context.workspaceId, [input.ownerId], 'Owner'))[0]
+      : null
+  }
 
-  if (Object.keys(patch).length === 0) return existing
+  const watcherIds =
+    input.watcherIds === undefined
+      ? undefined
+      : await assertWorkspaceMemberIds(context.admin, context.workspaceId, input.watcherIds, 'Watchers')
+
+  if (Object.keys(patch).length === 0 && watcherIds === undefined) return existing
 
   patch.updated_at = new Date().toISOString()
 
@@ -323,5 +522,18 @@ export async function updateWorkspaceServiceRequest(
     throw new ServiceRequestsHttpError('Could not update service request.', 500)
   }
 
-  return mapRowToServiceRequest(data as ServiceRequestRow, userId)
+  if (watcherIds !== undefined) {
+    await replaceWatchers(context.admin, context.workspaceId, requestId, watcherIds)
+  }
+
+  const [request] = await hydrateServiceRequests(
+    context.admin,
+    context.workspaceId,
+    [data as ServiceRequestRow],
+    userId
+  )
+  if (!request) {
+    throw new ServiceRequestsHttpError('Could not update service request.', 500)
+  }
+  return request
 }

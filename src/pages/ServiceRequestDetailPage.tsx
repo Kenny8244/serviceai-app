@@ -264,6 +264,15 @@ function ServiceRequestDetailPage() {
               />
               <DetailItem label="Priority" value={request.priority} />
               <DetailItem label="Status" value={request.status.replace('_', ' ')} />
+              <DetailItem label="Owner" value={request.owner?.name || 'None'} />
+              <DetailItem
+                label="Watchers"
+                value={
+                  (request.watchers ?? []).length > 0
+                    ? request.watchers.map((person) => person.name).join(', ')
+                    : 'None'
+                }
+              />
               <DetailItem label="Updated" value={formatDate(request.updatedAt)} />
               <DetailItem label="Created" value={formatDate(request.createdAt)} />
             </div>

@@ -15,6 +15,8 @@ const sample: ServiceRequest = {
   status: 'in_progress',
   relatedAssetId: 'obj-1',
   relatedAssetName: 'Walk-in cooler',
+  owner: { id: 'user-2', name: 'Ada Lovelace' },
+  watchers: [{ id: 'user-3', name: 'Grace Hopper' }],
   createdAt: new Date('2026-09-14T10:00:00.000Z'),
   updatedAt: new Date('2026-09-15T08:30:00.000Z'),
 }
@@ -48,6 +50,8 @@ describe('ServiceRequestDetailPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'Cooler alarm' })).toBeInTheDocument()
     expect(screen.getByText('Equipment')).toBeInTheDocument()
+    expect(screen.getByText('Ada Lovelace')).toBeInTheDocument()
+    expect(screen.getByText('Grace Hopper')).toBeInTheDocument()
     expect(screen.getByText('Beeping overnight')).toBeInTheDocument()
     expect(screen.getAllByText('high').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('in progress').length).toBeGreaterThanOrEqual(1)

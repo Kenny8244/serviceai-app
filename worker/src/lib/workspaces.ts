@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Env } from '../types'
-import { getWorkspaceIdForProfile } from './authAccount'
+import { getWorkspaceIdForProfile, resolvePreferredWorkspaceId } from './authAccount'
 import { ensureWorkspaceObjectTypes } from './objectTypes'
 import { getSupabaseAdmin, SUPABASE_CONFIG_HINT } from './supabase'
 
@@ -38,6 +38,63 @@ function requireAdmin(env: Env): SupabaseClient {
     throw new WorkspacesHttpError(`Workspace API requires Supabase. ${SUPABASE_CONFIG_HINT}`, 503)
   }
   return admin
+}
+
+export type WorkspaceMember = {
+  id: string
+  name: string
+  email: string
+}
+
+function memberName(row: {
+  full_name?: string | null
+  first_name?: string | null
+  last_name?: string | null
+  email?: string | null
+}): string {
+  const combined = [row.first_name, row.last_name].filter(Boolean).join(' ').trim()
+  return combined || row.full_name?.trim() || row.email?.trim() || 'Member'
+}
+
+export async function listWorkspaceMembers(
+  env: Env,
+  profileId: string,
+  preferredWorkspaceId?: string | null
+): Promise<WorkspaceMember[]> {
+  const admin = requireAdmin(env)
+  const workspaceId = await resolvePreferredWorkspaceId(admin, profileId, preferredWorkspaceId)
+  if (!workspaceId) return []
+
+  const { data: roles, error: rolesError } = await admin
+    .from('user_workspace_roles')
+    .select('profile_id')
+    .eq('workspace_id', workspaceId)
+
+  if (rolesError) {
+    console.error('Failed to list workspace members:', rolesError.message)
+    throw new WorkspacesHttpError('Could not load workspace members.', 500)
+  }
+
+  const ids = [...new Set((roles ?? []).map((row) => String(row.profile_id)).filter(Boolean))]
+  if (ids.length === 0) return []
+
+  const { data: profiles, error } = await admin
+    .from('profiles')
+    .select('id, full_name, first_name, last_name, email')
+    .in('id', ids)
+
+  if (error) {
+    console.error('Failed to load member profiles:', error.message)
+    throw new WorkspacesHttpError('Could not load workspace members.', 500)
+  }
+
+  return (profiles ?? [])
+    .map((row) => ({
+      id: String(row.id),
+      name: memberName(row),
+      email: typeof row.email === 'string' ? row.email : '',
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 }
 
 function mapWorkspace(row: WorkspaceRow, role: string): WorkspaceRecord {

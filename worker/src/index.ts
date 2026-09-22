@@ -41,6 +41,7 @@ import {
   findWorkspaceForVertical,
   getWorkspacePreferences,
   listWorkspacesForUser,
+  listWorkspaceMembers,
   updateWorkspacePreferences,
 } from './lib/workspaces'
 import { isValidVerticalId, resolveUserVertical, saveTenantVertical } from './lib/tenantVertical'
@@ -363,6 +364,18 @@ app.get('/api/workspaces', requireAuth, async (c) => {
   }
 })
 
+app.get('/api/workspace-members', requireAuth, async (c) => {
+  try {
+    const user = c.get('user')
+    const members = await listWorkspaceMembers(c.env, user.userId, user.workspaceId)
+    return c.json({ members })
+  } catch (error) {
+    const handled = handleDomainError(error)
+    if (handled) return c.json({ error: handled.error }, handled.status)
+    throw error
+  }
+})
+
 app.post('/api/onboarding/workspace', requireAuth, async (c) => {
   try {
     const body = await c.req.json<{ name?: string; description?: string | null }>()
@@ -525,6 +538,10 @@ app.post('/api/service-requests', requireAuth, async (c) => {
       status?: string
       relatedAssetId?: string | null
       related_asset_id?: string | null
+      ownerId?: string | null
+      owner_id?: string | null
+      watcherIds?: string[]
+      watcher_ids?: string[]
     }>()
     const serviceRequest = await createWorkspaceServiceRequest(
       c.env,
@@ -536,6 +553,8 @@ app.post('/api/service-requests', requireAuth, async (c) => {
         priority: body.priority as 'low' | 'medium' | 'high' | 'urgent' | undefined,
         status: body.status as 'open' | 'in_progress' | 'resolved' | 'closed' | undefined,
         relatedAssetId: body.relatedAssetId ?? body.related_asset_id,
+        ownerId: body.ownerId !== undefined || body.owner_id !== undefined ? (body.ownerId ?? body.owner_id) : undefined,
+        watcherIds: body.watcherIds ?? body.watcher_ids,
       },
       user.workspaceId
     )
@@ -578,6 +597,10 @@ app.patch('/api/service-requests/:id', requireAuth, async (c) => {
       status?: string
       relatedAssetId?: string | null
       related_asset_id?: string | null
+      ownerId?: string | null
+      owner_id?: string | null
+      watcherIds?: string[]
+      watcher_ids?: string[]
     }>()
     const serviceRequest = await updateWorkspaceServiceRequest(
       c.env,
@@ -593,6 +616,11 @@ app.patch('/api/service-requests/:id', requireAuth, async (c) => {
           body.relatedAssetId !== undefined || body.related_asset_id !== undefined
             ? (body.relatedAssetId ?? body.related_asset_id)
             : undefined,
+        ownerId:
+          body.ownerId !== undefined || body.owner_id !== undefined
+            ? (body.ownerId ?? body.owner_id)
+            : undefined,
+        watcherIds: body.watcherIds ?? body.watcher_ids,
       },
       user.workspaceId
     )

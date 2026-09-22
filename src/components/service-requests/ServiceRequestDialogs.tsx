@@ -48,6 +48,11 @@ export function ServiceRequestFormDialog({
   const [relatedAssetId, setRelatedAssetId] = useState(
     () => initial?.relatedAssetId ?? defaultRelatedAssetId ?? ''
   )
+  const [ownerId, setOwnerId] = useState(initial?.owner?.id ?? '')
+  const [watcherIds, setWatcherIds] = useState<string[]>(() => initial?.watchers.map((person) => person.id) ?? [])
+  const [members, setMembers] = useState<{ id: string; name: string }[]>([])
+  const [membersLoading, setMembersLoading] = useState(true)
+  const [membersError, setMembersError] = useState<string | null>(null)
   const [assets, setAssets] = useState<Asset[]>([])
   const [assetsLoading, setAssetsLoading] = useState(true)
   const [assetsError, setAssetsError] = useState<string | null>(null)
@@ -80,6 +85,29 @@ export function ServiceRequestFormDialog({
     }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    const loadMembers = async () => {
+      try {
+        setMembersLoading(true)
+        setMembersError(null)
+        const data = await apiService.getWorkspaceMembers()
+        if (!cancelled) setMembers(data)
+      } catch (err) {
+        if (!cancelled) {
+          setMembers([])
+          setMembersError(toUserMessage(err))
+        }
+      } finally {
+        if (!cancelled) setMembersLoading(false)
+      }
+    }
+    void loadMembers()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const trimmedTitle = title.trim()
@@ -94,6 +122,7 @@ export function ServiceRequestFormDialog({
       priority,
       status,
       ...(assetsError && isEdit ? {} : { relatedAssetId: relatedAssetId || null }),
+      ...(membersError ? {} : { ownerId: ownerId || null, watcherIds }),
     }
     try {
       setSaving(true)
@@ -132,7 +161,7 @@ export function ServiceRequestFormDialog({
             </h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
               {isEdit
-                ? 'Update details, status, priority, or related asset.'
+                ? 'Update details, owner, watchers, status, priority, or related asset.'
                 : 'Report an operational issue for this workspace.'}
             </p>
           </div>
@@ -217,6 +246,64 @@ export function ServiceRequestFormDialog({
               </select>
             </FormField>
           </div>
+
+          <FormField label="Owner" htmlFor="sr-owner">
+            {membersLoading ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">Loading people…</p>
+            ) : membersError ? (
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                Couldn’t load workspace members. Owner and watchers stay unchanged.
+              </p>
+            ) : (
+              <select
+                id="sr-owner"
+                className={nativeSelectClassName}
+                value={ownerId}
+                onChange={(event) => setOwnerId(event.target.value)}
+                disabled={saving}
+              >
+                <option value="">None</option>
+                {ownerId && !members.some((member) => member.id === ownerId) ? (
+                  <option value={ownerId}>{initial?.owner?.name || 'Current owner'}</option>
+                ) : null}
+                {members.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </FormField>
+
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Watchers</legend>
+            {membersLoading ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">Loading people…</p>
+            ) : membersError ? null : members.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">No other people in this workspace yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {members.map((member) => {
+                  const checked = watcherIds.includes(member.id)
+                  return (
+                    <label key={member.id} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={saving}
+                        onChange={() => {
+                          setWatcherIds((current) =>
+                            checked ? current.filter((id) => id !== member.id) : [...current, member.id]
+                          )
+                        }}
+                      />
+                      <span>{member.name}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </fieldset>
 
           <FormField label={`Related ${assetsLabel.toLowerCase()}`} htmlFor="sr-related-asset">
             {assetsLoading ? (
