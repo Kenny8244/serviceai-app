@@ -91,7 +91,13 @@ describe('AssetsImportPage', () => {
 
     expect(await screen.findByText(/This file has: sku, quantity/)).toBeInTheDocument()
     expect(screen.queryByText('Something went wrong. Please try again.')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Import/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Import \d/ })).not.toBeInTheDocument()
+    expect(screen.getByText('CSV Format Tips:')).toBeInTheDocument()
+    expect(document.querySelector('[data-tip="name"]')).toHaveAttribute('data-status', 'fail')
+    expect(document.querySelector('[data-tip="headers"]')).toHaveAttribute('data-status', 'pass')
+    expect(document.querySelector('[data-tip="optional"]')).toHaveAttribute('data-status', 'pass')
+    expect(document.querySelector('[data-tip="size"]')).toHaveAttribute('data-status', 'pass')
+    expect(document.querySelector('[data-tip="commas"]')).toHaveAttribute('data-status', 'pass')
   })
 
   it('maps a retail file that uses asset_id, type, and category', async () => {

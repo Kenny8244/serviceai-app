@@ -6,12 +6,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState } from '@/components/ui/loading-state'
 import { AssetImportPreview } from '@/components/import/AssetImportPreview'
+import { CsvFormatTips } from '@/components/import/CsvFormatTips'
 import { PageShell } from '@/components/layout/PageShell'
 import { getAssetImportSnapshot, startAssetImport } from '@/lib/assetImportJob'
+import { assessCsvFormat, CSV_MAX_BYTES, idleCsvChecks, type CsvFormatChecks } from '@/lib/csvFormatChecks'
 import { CsvMapError, CSV_NAME_HINT, mapCsvRowsToAssets, parseCsv, type MappedAssetRow } from '@/lib/parseCsv'
 import { toUserMessage } from '@/lib/userFacingError'
-
-const MAX_BYTES = 10 * 1024 * 1024
 
 function AssetsImportPage() {
   const navigate = useNavigate()
@@ -23,6 +23,7 @@ function AssetsImportPage() {
   const [ignored, setIgnored] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [reading, setReading] = useState(false)
+  const [checks, setChecks] = useState<CsvFormatChecks>(idleCsvChecks)
 
   const resetFile = () => {
     setFileName(null)
@@ -30,6 +31,7 @@ function AssetsImportPage() {
     setSkipped(0)
     setIgnored([])
     setError(null)
+    setChecks(idleCsvChecks())
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -40,15 +42,17 @@ function AssetsImportPage() {
       setReady([])
       setSkipped(0)
       setIgnored([])
+      setChecks(assessCsvFormat(file))
       return
     }
 
-    if (file.size > MAX_BYTES) {
+    if (file.size > CSV_MAX_BYTES) {
       setError('File size must be less than 10MB.')
       setFileName(null)
       setReady([])
       setSkipped(0)
       setIgnored([])
+      setChecks(assessCsvFormat(file))
       return
     }
 
@@ -56,7 +60,9 @@ function AssetsImportPage() {
     setError(null)
 
     try {
-      const table = parseCsv(await file.text())
+      const text = await file.text()
+      setChecks(assessCsvFormat(file, text))
+      const table = parseCsv(text)
       const mapped = mapCsvRowsToAssets(table)
       setFileName(file.name)
       setReady(mapped.ready)
@@ -195,6 +201,8 @@ function AssetsImportPage() {
                 disabled={!canImport}
               />
             ) : null}
+
+            <CsvFormatTips checks={checks} />
           </CardContent>
         </Card>
       </div>

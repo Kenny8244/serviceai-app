@@ -72,5 +72,8 @@ describe('DataImport', () => {
     expect(screen.queryByText('Something went wrong. Please try again.')).not.toBeInTheDocument()
     expect(screen.queryByText(/Ready to import/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Import \d/ })).not.toBeInTheDocument()
+    expect(document.querySelector('[data-tip="name"]')).toHaveAttribute('data-status', 'fail')
+    expect(document.querySelector('[data-tip="headers"]')).toHaveAttribute('data-status', 'pass')
+    expect(document.querySelector('[data-tip="commas"]')).toHaveAttribute('data-status', 'pass')
   })
 })

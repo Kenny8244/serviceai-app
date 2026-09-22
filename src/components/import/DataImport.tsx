@@ -8,9 +8,11 @@ import { LoadingState } from '@/components/ui/loading-state'
 import { Upload, FileText, CheckCircle, X, Sheet, Edit3 } from 'lucide-react'
 import { googleSheetsService, loadGoogleAPIs, type GoogleSheet } from '@/services/googleSheetsService'
 import { getAssetImportSnapshot, startAssetImport } from '@/lib/assetImportJob'
+import { assessCsvFormat, CSV_MAX_BYTES, idleCsvChecks, type CsvFormatChecks } from '@/lib/csvFormatChecks'
 import { toUserMessage } from '@/lib/userFacingError'
 import { CsvMapError, mapCsvRowsToAssets, parseCsv, type MappedAssetRow } from '@/lib/parseCsv'
 import { AssetImportPreview } from './AssetImportPreview'
+import { CsvFormatTips } from './CsvFormatTips'
 import { ManualDataEntry } from './ManualDataEntry'
 
 interface DataImportProps {
@@ -26,6 +28,7 @@ export function DataImport({ vertical }: DataImportProps) {
   const [ignored, setIgnored] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [checks, setChecks] = useState<CsvFormatChecks>(idleCsvChecks)
   const [importMethod, setImportMethod] = useState<'csv' | 'sheets' | 'manual'>('csv')
 
   // Google Sheets state
@@ -115,14 +118,15 @@ export function DataImport({ vertical }: DataImportProps) {
       setError('Please upload a CSV file')
       setUploadedFile(null)
       clearMapped()
+      setChecks(assessCsvFormat(file))
       return
     }
 
-    // Validate file size (max 10MB)
-    if (file.size > 10 * 1024 * 1024) {
+    if (file.size > CSV_MAX_BYTES) {
       setError('File size must be less than 10MB')
       setUploadedFile(null)
       clearMapped()
+      setChecks(assessCsvFormat(file))
       return
     }
 
@@ -132,7 +136,9 @@ export function DataImport({ vertical }: DataImportProps) {
     setLoading(true)
 
     try {
-      const { headers, rows } = parseCsv(await file.text())
+      const text = await file.text()
+      setChecks(assessCsvFormat(file, text))
+      const { headers, rows } = parseCsv(text)
       applyTable(headers, rows)
     } catch (err) {
       clearMapped()
@@ -201,6 +207,7 @@ export function DataImport({ vertical }: DataImportProps) {
     setUploadedFile(null)
     clearMapped()
     setError(null)
+    setChecks(idleCsvChecks())
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -442,39 +449,32 @@ export function DataImport({ vertical }: DataImportProps) {
           />
         ) : null}
 
-        {/* Instructions */}
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-          <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
-            {importMethod === 'csv' ? 'CSV Format Tips:' :
-             importMethod === 'sheets' ? 'Google Sheets Tips:' :
-             'Manual Entry Tips:'}
-          </h4>
-          <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-            {importMethod === 'csv' ? (
-              <>
-                <li>• First row should contain column headers</li>
-                <li>• Name column: name, product_name, item_name, asset_name, title, product, or item</li>
-                <li>• Optional: sku, asset_id, category, quantity, price, supplier, location, description</li>
-                <li>• Maximum file size: 10MB</li>
-                <li>• Use commas as separators</li>
-              </>
-            ) : importMethod === 'sheets' ? (
-              <>
-                <li>• Make sure your Google Sheet is shared or public</li>
-                <li>• First row should contain column headers</li>
-                <li>• Only reads the first sheet in your workbook</li>
-                <li>• Real-time sync with your Google Sheets</li>
-              </>
-            ) : (
-              <>
-                <li>• Add items one by one for precise control</li>
-                <li>• Click any item to edit its details</li>
-                <li>• Use categories to organize your items</li>
-                <li>• Price and quantity are optional fields</li>
-              </>
-            )}
-          </ul>
-        </div>
+        {importMethod === 'csv' ? (
+          <CsvFormatTips checks={checks} />
+        ) : (
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+              {importMethod === 'sheets' ? 'Google Sheets Tips:' : 'Manual Entry Tips:'}
+            </h4>
+            <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+              {importMethod === 'sheets' ? (
+                <>
+                  <li>• Make sure your Google Sheet is shared or public</li>
+                  <li>• First row should contain column headers</li>
+                  <li>• Only reads the first sheet in your workbook</li>
+                  <li>• Real-time sync with your Google Sheets</li>
+                </>
+              ) : (
+                <>
+                  <li>• Add items one by one for precise control</li>
+                  <li>• Click any item to edit its details</li>
+                  <li>• Use categories to organize your items</li>
+                  <li>• Price and quantity are optional fields</li>
+                </>
+              )}
+            </ul>
+          </div>
+        )}
       </CardContent>
     </Card>
   )
