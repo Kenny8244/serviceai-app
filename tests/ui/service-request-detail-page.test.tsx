@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ServiceRequestDetailPage from '@/pages/ServiceRequestDetailPage'
@@ -128,5 +128,61 @@ describe('ServiceRequestDetailPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /try again/i }))
     expect(await screen.findByRole('heading', { name: 'Cooler alarm' })).toBeInTheDocument()
     expect(getServiceRequest).toHaveBeenCalledTimes(2)
+  })
+
+  it('updates status and priority from the detail controls and shows the new timestamp', async () => {
+    vi.spyOn(apiService, 'getServiceRequest').mockResolvedValue({ serviceRequest: sample })
+    const afterStatus: ServiceRequest = {
+      ...sample,
+      status: 'resolved',
+      updatedAt: new Date('2026-09-15T12:00:00.000Z'),
+    }
+    const afterPriority: ServiceRequest = {
+      ...afterStatus,
+      priority: 'urgent',
+      updatedAt: new Date('2026-09-15T12:05:00.000Z'),
+    }
+    const updateServiceRequest = vi
+      .spyOn(apiService, 'updateServiceRequest')
+      .mockResolvedValueOnce({ serviceRequest: afterStatus })
+      .mockResolvedValueOnce({ serviceRequest: afterPriority })
+    renderDetail('/service-requests/sr-1')
+
+    const statusSelect = await screen.findByLabelText('Status')
+    const prioritySelect = screen.getByLabelText('Priority')
+    expect(statusSelect).toHaveValue('in_progress')
+    expect(prioritySelect).toHaveValue('high')
+
+    fireEvent.change(statusSelect, { target: { value: 'resolved' } })
+    await waitFor(() => {
+      expect(updateServiceRequest).toHaveBeenCalledWith('sr-1', { status: 'resolved' })
+    })
+    expect(statusSelect).toHaveValue('resolved')
+    expect(screen.getByText(afterStatus.updatedAt.toLocaleString())).toBeInTheDocument()
+
+    fireEvent.change(prioritySelect, { target: { value: 'urgent' } })
+    await waitFor(() => {
+      expect(updateServiceRequest).toHaveBeenCalledWith('sr-1', { priority: 'urgent' })
+    })
+    expect(prioritySelect).toHaveValue('urgent')
+    expect(screen.getByText(afterPriority.updatedAt.toLocaleString())).toBeInTheDocument()
+  })
+
+  it('reverts status and priority when the update fails', async () => {
+    vi.spyOn(apiService, 'getServiceRequest').mockResolvedValue({ serviceRequest: sample })
+    const updateServiceRequest = vi.spyOn(apiService, 'updateServiceRequest').mockRejectedValue(
+      Object.assign(new Error('Could not update service request.'), { status: 500 })
+    )
+    renderDetail('/service-requests/sr-1')
+
+    const statusSelect = await screen.findByLabelText('Status')
+    fireEvent.change(statusSelect, { target: { value: 'closed' } })
+
+    await waitFor(() => {
+      expect(updateServiceRequest).toHaveBeenCalledWith('sr-1', { status: 'closed' })
+    })
+    expect(await screen.findByRole('alert')).toHaveTextContent('The server had a problem')
+    expect(statusSelect).toHaveValue('in_progress')
+    expect(screen.getByLabelText('Priority')).toHaveValue('high')
   })
 })

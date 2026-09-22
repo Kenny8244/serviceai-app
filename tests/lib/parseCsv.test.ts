@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CSV_NAME_HINT, mapCsvRowsToAssets, parseCsv } from '@/lib/parseCsv'
+import { mapCsvRowsToAssets, parseCsv } from '@/lib/parseCsv'
 
 describe('parseCsv', () => {
   it('reads headers and rows, trimming quotes', () => {
@@ -18,8 +18,9 @@ describe('mapCsvRowsToAssets', () => {
     const table = parseCsv(
       'title,qty,location\nCooler,12,Kitchen\n,3,Back\nFreezer,4,Kitchen\n'
     )
-    const { ready, skipped } = mapCsvRowsToAssets(table)
+    const { ready, skipped, ignoredHeaders } = mapCsvRowsToAssets(table)
     expect(skipped).toBe(1)
+    expect(ignoredHeaders).toEqual([])
     expect(ready).toEqual([
       {
         name: 'Cooler',
@@ -46,8 +47,35 @@ describe('mapCsvRowsToAssets', () => {
     ])
   })
 
-  it('errors when there is no name column', () => {
+  it('maps product_name and item_name, and prefers category over type', () => {
+    const byProduct = parseCsv(
+      'asset_id,product_name,type,location,status,category\nRET-1001,Widget A,Widget,Aisle 1,active,Footwear\n'
+    )
+    const product = mapCsvRowsToAssets(byProduct)
+    expect(product.ready[0]).toMatchObject({
+      name: 'Widget A',
+      sku: 'RET-1001',
+      category: 'Footwear',
+      location: 'Aisle 1',
+    })
+    expect(product.ignoredHeaders).toEqual(['type', 'status'])
+
+    const byItem = parseCsv('item_name,asset_id\nBolt,B-1\n')
+    expect(mapCsvRowsToAssets(byItem).ready[0]).toMatchObject({ name: 'Bolt', sku: 'B-1' })
+
+    const spaced = parseCsv('Product Name\nCrate\n')
+    expect(mapCsvRowsToAssets(spaced).ready[0].name).toBe('Crate')
+  })
+
+  it('uses type as category only when category is absent', () => {
+    const table = parseCsv('name,type\nWidget,Spare\n')
+    expect(mapCsvRowsToAssets(table).ready[0].category).toBe('Spare')
+  })
+
+  it('errors when there is no name column and lists the headers it found', () => {
     const table = parseCsv('sku,quantity\nSKU-1,2\n')
-    expect(() => mapCsvRowsToAssets(table)).toThrow(CSV_NAME_HINT)
+    expect(() => mapCsvRowsToAssets(table)).toThrow(
+      'No name column found. This file has: sku, quantity. Add a column named name, product_name, item_name, asset_name, title, product, or item.'
+    )
   })
 })

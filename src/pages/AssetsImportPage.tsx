@@ -3,15 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { FileText, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState } from '@/components/ui/loading-state'
+import { AssetImportPreview } from '@/components/import/AssetImportPreview'
 import { PageShell } from '@/components/layout/PageShell'
 import { getAssetImportSnapshot, startAssetImport } from '@/lib/assetImportJob'
-import { CSV_NAME_HINT, mapCsvRowsToAssets, parseCsv, type MappedAssetRow } from '@/lib/parseCsv'
+import { CsvMapError, CSV_NAME_HINT, mapCsvRowsToAssets, parseCsv, type MappedAssetRow } from '@/lib/parseCsv'
 import { toUserMessage } from '@/lib/userFacingError'
 
-const PREVIEW_LIMIT = 20
 const MAX_BYTES = 10 * 1024 * 1024
 
 function AssetsImportPage() {
@@ -21,6 +20,7 @@ function AssetsImportPage() {
   const [fileName, setFileName] = useState<string | null>(null)
   const [ready, setReady] = useState<MappedAssetRow[]>([])
   const [skipped, setSkipped] = useState(0)
+  const [ignored, setIgnored] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [reading, setReading] = useState(false)
 
@@ -28,6 +28,7 @@ function AssetsImportPage() {
     setFileName(null)
     setReady([])
     setSkipped(0)
+    setIgnored([])
     setError(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
@@ -38,11 +39,16 @@ function AssetsImportPage() {
       setFileName(null)
       setReady([])
       setSkipped(0)
+      setIgnored([])
       return
     }
 
     if (file.size > MAX_BYTES) {
       setError('File size must be less than 10MB.')
+      setFileName(null)
+      setReady([])
+      setSkipped(0)
+      setIgnored([])
       return
     }
 
@@ -55,6 +61,7 @@ function AssetsImportPage() {
       setFileName(file.name)
       setReady(mapped.ready)
       setSkipped(mapped.skipped)
+      setIgnored(mapped.ignoredHeaders)
       if (mapped.ready.length === 0) {
         setError('No rows with a name to import.')
       }
@@ -62,7 +69,8 @@ function AssetsImportPage() {
       setFileName(file.name)
       setReady([])
       setSkipped(0)
-      setError(toUserMessage(err) || CSV_NAME_HINT)
+      setIgnored([])
+      setError(err instanceof CsvMapError ? err.message : toUserMessage(err) || CSV_NAME_HINT)
     } finally {
       setReading(false)
     }
@@ -97,7 +105,6 @@ function AssetsImportPage() {
     navigate('/assets')
   }
 
-  const previewRows = ready.slice(0, PREVIEW_LIMIT)
   const canImport = ready.length > 0 && !reading && getAssetImportSnapshot().status !== 'running'
 
   return (
@@ -115,7 +122,7 @@ function AssetsImportPage() {
           <CardHeader>
             <CardTitle className="flex items-center text-lg">
               <Upload className="mr-2 h-5 w-5" />
-              CSV file0
+              CSV file
             </CardTitle>
             <CardDescription>
               Columns are mapped automatically. {CSV_NAME_HINT}
@@ -144,7 +151,11 @@ function AssetsImportPage() {
 
               {fileName ? (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-center space-x-2 text-green-600">
+                  <div
+                    className={`flex items-center justify-center space-x-2 ${
+                      error ? 'text-slate-600 dark:text-slate-300' : 'text-green-600'
+                    }`}
+                  >
                     <FileText className="h-8 w-8" />
                     <span className="font-medium text-slate-800 dark:text-slate-100">{fileName}</span>
                   </div>
@@ -176,50 +187,13 @@ function AssetsImportPage() {
             ) : null}
 
             {ready.length > 0 ? (
-              <div className="space-y-4">
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  {ready.length} will be imported
-                  {skipped > 0 ? `, ${skipped} skipped (missing name)` : ''}.
-                  {ready.length > PREVIEW_LIMIT
-                    ? ` Showing the first ${PREVIEW_LIMIT} rows.`
-                    : ''}
-                </p>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Quantity</TableHead>
-                      <TableHead>Min qty</TableHead>
-                      <TableHead>Unit cost</TableHead>
-                      <TableHead>Supplier</TableHead>
-                      <TableHead>Location</TableHead>
-                      <TableHead>Description</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {previewRows.map((row, index) => (
-                      <TableRow key={`${row.name}-${index}`}>
-                        <TableCell>{row.name}</TableCell>
-                        <TableCell>{row.sku || '—'}</TableCell>
-                        <TableCell>{row.category || '—'}</TableCell>
-                        <TableCell>{row.quantity ?? 0}</TableCell>
-                        <TableCell>{row.minQuantity ?? 0}</TableCell>
-                        <TableCell>{row.unitCost == null ? '—' : row.unitCost}</TableCell>
-                        <TableCell>{row.supplier || '—'}</TableCell>
-                        <TableCell>{row.location || '—'}</TableCell>
-                        <TableCell className="max-w-[16rem] truncate">{row.description || '—'}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                <div className="flex items-center gap-3">
-                  <Button type="button" onClick={runImport} disabled={!canImport}>
-                    Import {ready.length} {ready.length === 1 ? 'item' : 'items'}
-                  </Button>
-                </div>
-              </div>
+              <AssetImportPreview
+                ready={ready}
+                skipped={skipped}
+                ignoredHeaders={ignored}
+                onImport={runImport}
+                disabled={!canImport}
+              />
             ) : null}
           </CardContent>
         </Card>

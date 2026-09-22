@@ -29,12 +29,17 @@ export function ImportProgressPanel() {
               {snapshot.current} of {snapshot.total}
             </p>
           ) : (
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Imported {snapshot.imported}
-              {snapshot.imported === 1 ? ' item' : ' items'}
-              {snapshot.failed > 0 ? `, ${snapshot.failed} failed` : ''}
-              {snapshot.skipped > 0 ? `, ${snapshot.skipped} skipped` : ''}
-            </p>
+            <>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Imported {snapshot.imported}
+                {snapshot.imported === 1 ? ' item' : ' items'}
+                {snapshot.failed > 0 ? `, ${snapshot.failed} failed` : ''}
+                {snapshot.skipped > 0 ? `, ${snapshot.skipped} skipped` : ''}
+              </p>
+              {snapshot.lastError ? (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">{snapshot.lastError}</p>
+              ) : null}
+            </>
           )}
         </div>
         {running ? null : (

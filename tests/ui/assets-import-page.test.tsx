@@ -89,6 +89,44 @@ describe('AssetsImportPage', () => {
       target: { files: [csvFile('items.csv', 'sku,quantity\nSKU-1,2\n')] },
     })
 
-    expect(await screen.findByText(/Add a name column/)).toBeInTheDocument()
+    expect(await screen.findByText(/This file has: sku, quantity/)).toBeInTheDocument()
+    expect(screen.queryByText('Something went wrong. Please try again.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Import/ })).not.toBeInTheDocument()
+  })
+
+  it('maps a retail file that uses asset_id, type, and category', async () => {
+    const start = vi.spyOn(importJob, 'startAssetImport')
+    renderPage()
+
+    fireEvent.change(screen.getByLabelText('CSV file'), {
+      target: {
+        files: [
+          csvFile(
+            'xinder_service_ai_retail_test_data.csv',
+            'asset_id,name,type,location,status,category\nRET-1001,Widget A,Widget,Aisle 1,active,Footwear\n'
+          ),
+        ],
+      },
+    })
+
+    expect(await screen.findByText('Widget A')).toBeInTheDocument()
+    expect(screen.getByText('RET-1001')).toBeInTheDocument()
+    expect(screen.getByText('Footwear')).toBeInTheDocument()
+    expect(screen.getByText('Not imported: type, status.')).toBeInTheDocument()
+    expect(screen.queryByText('Something went wrong. Please try again.')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import 1 item' }))
+
+    expect(start).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          name: 'Widget A',
+          sku: 'RET-1001',
+          category: 'Footwear',
+          location: 'Aisle 1',
+        }),
+      ],
+      0
+    )
   })
 })

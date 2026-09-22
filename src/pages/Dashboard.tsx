@@ -265,12 +265,7 @@ export function Dashboard() {
           </>
         )}
 
-        <DataImport
-          vertical={selectedVertical}
-          onDataImported={(data) => {
-            console.log('Data imported:', data)
-          }}
-        />
+        <DataImport vertical={selectedVertical} />
     </PageShell>
   )
 }

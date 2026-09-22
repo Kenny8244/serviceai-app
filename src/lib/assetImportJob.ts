@@ -1,4 +1,5 @@
 import type { MappedAssetRow } from '@/lib/parseCsv'
+import { toUserMessage } from '@/lib/userFacingError'
 import { apiService, type Asset } from '@/services/api'
 
 export function rowToAssetCreateInput(row: MappedAssetRow, objectTypeId?: string) {
@@ -39,6 +40,7 @@ export type AssetImportSnapshot = {
   failed: number
   skipped: number
   lastAsset: Asset | null
+  lastError: string | null
 }
 
 const idleSnapshot: AssetImportSnapshot = {
@@ -49,6 +51,7 @@ const idleSnapshot: AssetImportSnapshot = {
   failed: 0,
   skipped: 0,
   lastAsset: null,
+  lastError: null,
 }
 
 let snapshot: AssetImportSnapshot = idleSnapshot
@@ -94,6 +97,7 @@ export function startAssetImport(rows: MappedAssetRow[], skipped = 0) {
     failed: 0,
     skipped,
     lastAsset: null,
+    lastError: null,
   }
   emit()
 
@@ -114,8 +118,12 @@ export function startAssetImport(rows: MappedAssetRow[], skipped = 0) {
       try {
         const lastAsset = await apiService.createAsset(rowToAssetCreateInput(rows[index], objectTypeId))
         snapshot = { ...snapshot, imported: snapshot.imported + 1, lastAsset }
-      } catch {
-        snapshot = { ...snapshot, failed: snapshot.failed + 1 }
+      } catch (err) {
+        snapshot = {
+          ...snapshot,
+          failed: snapshot.failed + 1,
+          lastError: snapshot.lastError ?? toUserMessage(err),
+        }
       }
       emit()
     }

@@ -140,6 +140,7 @@ describe('assetImportJob', () => {
       failed: 1,
       skipped: 1,
       total: 3,
+      lastError: 'nope',
     })
   })
 })

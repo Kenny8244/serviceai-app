@@ -4,8 +4,10 @@ import { ArrowLeft, ClipboardList, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
+import { FormField, nativeSelectClassName } from '@/components/ui/form-field'
 import { LoadingState, SkeletonBlock } from '@/components/ui/loading-state'
 import { PageShell } from '@/components/layout/PageShell'
 import { ServiceRequestFormDialog } from '@/components/service-requests/ServiceRequestDialogs'
@@ -13,6 +15,13 @@ import { getSelectedVertical } from '@/lib/verticalStorage'
 import { getVerticalContent } from '@/lib/verticalContent'
 import { toUserMessage } from '@/lib/userFacingError'
 import { apiService, type ServiceRequest } from '@/services/api'
+
+const PRIORITIES: Array<ServiceRequest['priority']> = ['low', 'medium', 'high', 'urgent']
+const STATUSES: Array<ServiceRequest['status']> = ['open', 'in_progress', 'resolved', 'closed']
+
+function formatOptionLabel(value: string): string {
+  return value.replace(/_/g, ' ')
+}
 
 function formatDate(value: Date | string): string {
   const date = value instanceof Date ? value : new Date(value)
@@ -84,6 +93,8 @@ function ServiceRequestDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [savingLifecycle, setSavingLifecycle] = useState(false)
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null)
 
   const loadRequest = useCallback(async () => {
     if (!id) {
@@ -122,6 +133,29 @@ function ServiceRequestDetailPage() {
     void loadRequest()
   }, [loadRequest])
 
+  const updateLifecycle = async (
+    field: 'priority' | 'status',
+    value: ServiceRequest['priority'] | ServiceRequest['status']
+  ) => {
+    if (!request || savingLifecycle) return
+    if (field === 'priority' && value === request.priority) return
+    if (field === 'status' && value === request.status) return
+
+    const previous = request
+    setRequest({ ...request, [field]: value })
+    setSavingLifecycle(true)
+    setLifecycleError(null)
+    try {
+      const { serviceRequest } = await apiService.updateServiceRequest(previous.id, { [field]: value })
+      setRequest(serviceRequest)
+    } catch (err) {
+      setRequest(previous)
+      setLifecycleError(toUserMessage(err))
+    } finally {
+      setSavingLifecycle(false)
+    }
+  }
+
   return (
     <PageShell
       title={vertical.navServiceRequestsLabel}
@@ -156,6 +190,52 @@ function ServiceRequestDetailPage() {
                 <Badge variant={priorityVariant(request.priority)}>{request.priority}</Badge>
                 <Badge variant={statusVariant(request.status)}>{request.status.replace('_', ' ')}</Badge>
               </div>
+              <fieldset
+                className="mt-4 grid gap-3 sm:grid-cols-2 max-w-xl"
+                disabled={savingLifecycle}
+                aria-busy={savingLifecycle}
+              >
+                <legend className="sr-only">Update status and priority</legend>
+                <FormField label="Priority" htmlFor="sr-detail-priority">
+                  <select
+                    id="sr-detail-priority"
+                    className={nativeSelectClassName}
+                    value={request.priority}
+                    aria-label="Priority"
+                    onChange={(event) =>
+                      void updateLifecycle('priority', event.target.value as ServiceRequest['priority'])
+                    }
+                  >
+                    {PRIORITIES.map((item) => (
+                      <option key={item} value={item}>
+                        {formatOptionLabel(item)}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+                <FormField label="Status" htmlFor="sr-detail-status">
+                  <select
+                    id="sr-detail-status"
+                    className={nativeSelectClassName}
+                    value={request.status}
+                    aria-label="Status"
+                    onChange={(event) =>
+                      void updateLifecycle('status', event.target.value as ServiceRequest['status'])
+                    }
+                  >
+                    {STATUSES.map((item) => (
+                      <option key={item} value={item}>
+                        {formatOptionLabel(item)}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              </fieldset>
+              {lifecycleError ? (
+                <Alert variant="destructive" className="mt-3 max-w-xl">
+                  <AlertDescription>{lifecycleError}</AlertDescription>
+                </Alert>
+              ) : null}
             </div>
             <Button
               type="button"

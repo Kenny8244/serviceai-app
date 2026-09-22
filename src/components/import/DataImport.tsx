@@ -1,33 +1,29 @@
 import React, { useState, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState } from '@/components/ui/loading-state'
-import { SuccessBanner } from '@/components/ui/success-banner'
 import { Upload, FileText, CheckCircle, X, Sheet, Edit3 } from 'lucide-react'
 import { googleSheetsService, loadGoogleAPIs, type GoogleSheet } from '@/services/googleSheetsService'
+import { getAssetImportSnapshot, startAssetImport } from '@/lib/assetImportJob'
 import { toUserMessage } from '@/lib/userFacingError'
-import { parseCsv } from '@/lib/parseCsv'
+import { CsvMapError, mapCsvRowsToAssets, parseCsv, type MappedAssetRow } from '@/lib/parseCsv'
+import { AssetImportPreview } from './AssetImportPreview'
 import { ManualDataEntry } from './ManualDataEntry'
-
-interface CSVData {
-  headers: string[]
-  rows: string[][]
-  filename: string
-  source?: string
-}
 
 interface DataImportProps {
   vertical: string
-  onDataImported?: (data: CSVData) => void
 }
 
-export function DataImport({ vertical, onDataImported }: DataImportProps) {
+export function DataImport({ vertical }: DataImportProps) {
+  const navigate = useNavigate()
   const [dragActive, setDragActive] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
-  const [csvData, setCsvData] = useState<CSVData | null>(null)
+  const [ready, setReady] = useState<MappedAssetRow[]>([])
+  const [skipped, setSkipped] = useState(0)
+  const [ignored, setIgnored] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [importMethod, setImportMethod] = useState<'csv' | 'sheets' | 'manual'>('csv')
@@ -40,6 +36,35 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
   const [selectedSpreadsheet, setSelectedSpreadsheet] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const clearMapped = () => {
+    setReady([])
+    setSkipped(0)
+    setIgnored([])
+  }
+
+  const applyTable = (headers: string[], rows: string[][]) => {
+    try {
+      const mapped = mapCsvRowsToAssets({ headers, rows })
+      setReady(mapped.ready)
+      setSkipped(mapped.skipped)
+      setIgnored(mapped.ignoredHeaders)
+      setError(mapped.ready.length === 0 ? 'No rows with a name to import.' : null)
+    } catch (err) {
+      clearMapped()
+      setError(
+        err instanceof CsvMapError
+          ? err.message
+          : toUserMessage(err) || 'We could not read that CSV file. Please try another file.'
+      )
+    }
+  }
+
+  const runImport = () => {
+    if (ready.length === 0 || getAssetImportSnapshot().status === 'running') return
+    startAssetImport(ready, skipped)
+    navigate('/assets')
+  }
 
   // Initialize Google Sheets on component mount
   React.useEffect(() => {
@@ -88,31 +113,29 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
     // Validate file type
     if (!file.name.toLowerCase().endsWith('.csv')) {
       setError('Please upload a CSV file')
+      setUploadedFile(null)
+      clearMapped()
       return
     }
 
     // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
       setError('File size must be less than 10MB')
+      setUploadedFile(null)
+      clearMapped()
       return
     }
 
     setUploadedFile(file)
     setError(null)
+    clearMapped()
     setLoading(true)
 
     try {
       const { headers, rows } = parseCsv(await file.text())
-      const csvData: CSVData = {
-        headers,
-        rows,
-        filename: file.name,
-        source: 'csv'
-      }
-
-      setCsvData(csvData)
-      onDataImported?.(csvData)
+      applyTable(headers, rows)
     } catch (err) {
+      clearMapped()
       setError(toUserMessage(err) || 'We could not read that CSV file. Please try another file.')
     } finally {
       setLoading(false)
@@ -160,11 +183,8 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
 
       setSelectedSpreadsheet(spreadsheetId)
       const data = await googleSheetsService.getSheetData(spreadsheetId)
-
-      // Convert to our format and trigger callback
       const csvData = googleSheetsService.convertToCSVData(data, 'Google Sheet')
-      setCsvData(csvData)
-      onDataImported?.(csvData)
+      applyTable(csvData.headers, csvData.rows)
     } catch (error) {
       setSheetsError(toUserMessage(error))
       console.error('Load sheet data error:', error)
@@ -179,8 +199,9 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
 
   const clearData = () => {
     setUploadedFile(null)
-    setCsvData(null)
+    clearMapped()
     setError(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   return (
@@ -262,14 +283,23 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
                 ref={fileInputRef}
                 type="file"
                 accept=".csv"
+                aria-label="CSV file"
                 onChange={handleFileInput}
                 className="hidden"
               />
 
               {uploadedFile ? (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-center space-x-2 text-green-600">
-                    <CheckCircle className="h-8 w-8" />
+                  <div
+                    className={`flex items-center justify-center space-x-2 ${
+                      error || ready.length === 0 ? 'text-slate-600 dark:text-slate-300' : 'text-green-600'
+                    }`}
+                  >
+                    {error || ready.length === 0 ? (
+                      <FileText className="h-8 w-8" />
+                    ) : (
+                      <CheckCircle className="h-8 w-8" />
+                    )}
                     <span className="font-medium">{uploadedFile.name}</span>
                   </div>
                   <Button variant="outline" onClick={clearData}>
@@ -299,13 +329,6 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
               <LoadingState label="Processing your CSV file…" className="py-8" />
             )}
 
-            {error && (
-              <ErrorState
-                title="Could not import that file"
-                message={error}
-                className="py-6"
-              />
-            )}
           </>
         )}
 
@@ -388,7 +411,6 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
           <ManualDataEntry
             vertical={vertical}
             onItemsAdded={(items) => {
-              // Convert manual items to CSV format for consistency
               const headers = ['name', 'description', 'price', 'quantity', 'category']
               const rows = items.map(item => [
                 item.name,
@@ -397,65 +419,28 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
                 item.quantity?.toString() || '',
                 item.category || ''
               ])
-
-              const csvData: CSVData = {
-                headers,
-                rows,
-                filename: 'Manual Entry',
-                source: 'manual'
-              }
-
-              setCsvData(csvData)
-              onDataImported?.(csvData)
+              applyTable(headers, rows)
             }}
           />
         )}
 
-        {/* Data Preview */}
-        {csvData && !loading && !error && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-slate-900 dark:text-slate-100">
-                Data Preview
-              </h3>
-              <span className="text-sm text-slate-500">
-                {csvData.rows.length} rows × {csvData.headers.length} columns
-              </span>
-            </div>
+        {error && !loading ? (
+          <ErrorState
+            title="Could not import that file"
+            message={error}
+            className="py-6"
+          />
+        ) : null}
 
-            <div className="max-h-48 overflow-y-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {csvData.headers.slice(0, 4).map((header, index) => (
-                      <TableHead key={index}>{header}</TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {csvData.rows.slice(0, 5).map((row, rowIndex) => (
-                    <TableRow key={rowIndex}>
-                      {row.slice(0, 4).map((cell, cellIndex) => (
-                        <TableCell key={cellIndex} className="truncate max-w-[12rem]">{cell}</TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                  {csvData.rows.length > 5 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground">
-                        ... and {csvData.rows.length - 5} more rows
-                      </TableCell>
-                    </TableRow>
-                  ) : null}
-                </TableBody>
-              </Table>
-            </div>
-
-            <SuccessBanner>
-              {csvData.source === 'google-sheets' ? 'Google Sheets data' : csvData.source === 'manual' ? 'Manual entry data' : 'CSV file'} processed successfully. Ready to import {csvData.rows.length} items.
-            </SuccessBanner>
-          </div>
-        )}
+        {ready.length > 0 && !loading && !error ? (
+          <AssetImportPreview
+            ready={ready}
+            skipped={skipped}
+            ignoredHeaders={ignored}
+            onImport={runImport}
+            disabled={getAssetImportSnapshot().status === 'running'}
+          />
+        ) : null}
 
         {/* Instructions */}
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
@@ -468,7 +453,8 @@ export function DataImport({ vertical, onDataImported }: DataImportProps) {
             {importMethod === 'csv' ? (
               <>
                 <li>• First row should contain column headers</li>
-                <li>• Supported columns: name, description, price, quantity, category</li>
+                <li>• Name column: name, product_name, item_name, asset_name, title, product, or item</li>
+                <li>• Optional: sku, asset_id, category, quantity, price, supplier, location, description</li>
                 <li>• Maximum file size: 10MB</li>
                 <li>• Use commas as separators</li>
               </>

@@ -27,8 +27,8 @@ export type MappedAssetRow = {
 }
 
 const FIELD_ALIASES: Record<AssetCsvField, string[]> = {
-  name: ['name', 'title', 'product', 'item'],
-  sku: ['sku', 'code', 'article'],
+  name: ['name', 'product_name', 'item_name', 'asset_name', 'title', 'product', 'item'],
+  sku: ['sku', 'asset_id', 'code', 'article'],
   category: ['category', 'type'],
   quantity: ['quantity', 'qty', 'stock'],
   minQuantity: ['min_quantity', 'minquantity', 'reorder', 'minimum'],
@@ -38,8 +38,23 @@ const FIELD_ALIASES: Record<AssetCsvField, string[]> = {
   description: ['description', 'notes'],
 }
 
+const NAME_COLUMNS = 'name, product_name, item_name, asset_name, title, product, or item'
+
 export const CSV_NAME_HINT =
-  'Add a name column (name, title, product, or item). Optional: sku, category, quantity, min_quantity, unit_cost, supplier, location, description.'
+  `Add a name column (${NAME_COLUMNS}). Optional: sku, asset_id, category, quantity, min_quantity, unit_cost, supplier, location, description.`
+
+export class CsvMapError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'CsvMapError'
+  }
+}
+
+export function missingNameColumnMessage(headers: string[]): string {
+  const found = headers.map((header) => header.trim()).filter(Boolean)
+  const listed = found.length > 0 ? found.join(', ') : 'none'
+  return `No name column found. This file has: ${listed}. Add a column named ${NAME_COLUMNS}.`
+}
 
 function normalizeHeader(header: string): string {
   return header.trim().toLowerCase().replace(/['"]/g, '').replace(/\s+/g, '_')
@@ -65,8 +80,13 @@ export function columnIndexMap(headers: string[]): Partial<Record<AssetCsvField,
   const normalized = headers.map(normalizeHeader)
 
   for (const [field, aliases] of Object.entries(FIELD_ALIASES) as [AssetCsvField, string[]][]) {
-    const index = normalized.findIndex((header) => aliases.includes(header))
-    if (index >= 0) map[field] = index
+    for (const alias of aliases) {
+      const index = normalized.findIndex((header) => header === alias)
+      if (index >= 0) {
+        map[field] = index
+        break
+      }
+    }
   }
 
   return map
@@ -83,13 +103,21 @@ function parseNumber(value: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
+function headersNotImported(headers: string[], columns: Partial<Record<AssetCsvField, number>>): string[] {
+  const used = new Set(
+    Object.values(columns).filter((index): index is number => index != null)
+  )
+  return headers.filter((header, index) => header.trim() && !used.has(index))
+}
+
 export function mapCsvRowsToAssets(table: CsvTable): {
   ready: MappedAssetRow[]
   skipped: number
+  ignoredHeaders: string[]
 } {
   const columns = columnIndexMap(table.headers)
   if (columns.name == null) {
-    throw new Error(CSV_NAME_HINT)
+    throw new CsvMapError(missingNameColumnMessage(table.headers))
   }
 
   const ready: MappedAssetRow[] = []
@@ -116,5 +144,5 @@ export function mapCsvRowsToAssets(table: CsvTable): {
     })
   }
 
-  return { ready, skipped }
+  return { ready, skipped, ignoredHeaders: headersNotImported(table.headers, columns) }
 }

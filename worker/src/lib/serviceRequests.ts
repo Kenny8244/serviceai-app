@@ -68,14 +68,38 @@ function asString(value: unknown): string | null {
   return trimmed ? trimmed : null
 }
 
-function normalizePriority(value: unknown, fallback: ServiceRequest['priority'] = 'medium'): ServiceRequest['priority'] {
+function parsePriority(value: unknown): ServiceRequest['priority'] | null {
   const raw = typeof value === 'string' ? value.trim().toLowerCase() : ''
-  return PRIORITIES.has(raw) ? (raw as ServiceRequest['priority']) : fallback
+  return PRIORITIES.has(raw) ? (raw as ServiceRequest['priority']) : null
+}
+
+function parseStatus(value: unknown): ServiceRequest['status'] | null {
+  const raw = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  return STATUSES.has(raw) ? (raw as ServiceRequest['status']) : null
+}
+
+function normalizePriority(value: unknown, fallback: ServiceRequest['priority'] = 'medium'): ServiceRequest['priority'] {
+  return parsePriority(value) ?? fallback
 }
 
 function normalizeStatus(value: unknown, fallback: ServiceRequest['status'] = 'open'): ServiceRequest['status'] {
-  const raw = typeof value === 'string' ? value.trim().toLowerCase() : ''
-  return STATUSES.has(raw) ? (raw as ServiceRequest['status']) : fallback
+  return parseStatus(value) ?? fallback
+}
+
+function requirePriority(value: unknown): ServiceRequest['priority'] {
+  const parsed = parsePriority(value)
+  if (!parsed) {
+    throw new ServiceRequestsHttpError('Priority must be low, medium, high, or urgent.', 400)
+  }
+  return parsed
+}
+
+function requireStatus(value: unknown): ServiceRequest['status'] {
+  const parsed = parseStatus(value)
+  if (!parsed) {
+    throw new ServiceRequestsHttpError('Status must be open, in_progress, resolved, or closed.', 400)
+  }
+  return parsed
 }
 
 function relatedAsset(rel: AssetRel): { id: string | null; name: string | null } {
@@ -202,8 +226,8 @@ export async function createWorkspaceServiceRequest(
   if (!category) throw new ServiceRequestsHttpError('Category is required.', 400)
 
   const description = asString(input.description) || ''
-  const priority = normalizePriority(input.priority)
-  const status = normalizeStatus(input.status)
+  const priority = input.priority === undefined ? 'medium' : requirePriority(input.priority)
+  const status = input.status === undefined ? 'open' : requireStatus(input.status)
   const relatedAssetId = await assertRelatedAssetInWorkspace(
     context.admin,
     context.workspaceId,
@@ -269,10 +293,10 @@ export async function updateWorkspaceServiceRequest(
     patch.type = category
   }
   if (input.priority !== undefined) {
-    patch.priority = normalizePriority(input.priority, existing.priority)
+    patch.priority = requirePriority(input.priority)
   }
   if (input.status !== undefined) {
-    patch.status = normalizeStatus(input.status, existing.status)
+    patch.status = requireStatus(input.status)
   }
   if (input.relatedAssetId !== undefined) {
     patch.related_asset_object_id = await assertRelatedAssetInWorkspace(
@@ -283,6 +307,8 @@ export async function updateWorkspaceServiceRequest(
   }
 
   if (Object.keys(patch).length === 0) return existing
+
+  patch.updated_at = new Date().toISOString()
 
   const { data, error } = await context.admin
     .from('service_requests')
