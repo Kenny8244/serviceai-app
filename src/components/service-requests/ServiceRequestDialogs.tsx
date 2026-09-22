@@ -1,6 +1,6 @@
-import { useEffect, useState, type FormEvent, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Link2, Package, X } from 'lucide-react'
+import { ChevronDown, Link2, Package, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -21,6 +21,87 @@ function formatOptionLabel(value: string): string {
 
 function categoryValue(raw: string | undefined | null): string {
   return raw?.trim() || 'General'
+}
+
+function WatchersSelect({
+  members,
+  watcherIds,
+  disabled,
+  onChange,
+}: {
+  members: { id: string; name: string }[]
+  watcherIds: string[]
+  disabled: boolean
+  onChange: (ids: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const selected = members.filter((member) => watcherIds.includes(member.id))
+  const label = selected.length > 0 ? selected.map((member) => member.name).join(', ') : 'None'
+
+  useEffect(() => {
+    if (!open) return
+    const close = (event: globalThis.MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        type="button"
+        id="sr-watchers"
+        className={`${nativeSelectClassName} items-center justify-between text-left`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="truncate">{label}</span>
+        <ChevronDown className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
+      </button>
+      {open ? (
+        <div
+          role="listbox"
+          aria-multiselectable="true"
+          className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-input bg-background py-1 shadow-md"
+        >
+          <button
+            type="button"
+            role="option"
+            aria-selected={watcherIds.length === 0}
+            className="flex w-full px-3 py-2 text-left text-sm hover:bg-muted"
+            onClick={() => {
+              onChange([])
+              setOpen(false)
+            }}
+          >
+            None
+          </button>
+          {members.map((member) => {
+            const checked = watcherIds.includes(member.id)
+            return (
+              <button
+                key={member.id}
+                type="button"
+                role="option"
+                aria-selected={checked}
+                className="flex w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                onClick={() =>
+                  onChange(checked ? watcherIds.filter((id) => id !== member.id) : [...watcherIds, member.id])
+                }
+              >
+                <span className="w-5 shrink-0">{checked ? '✓' : ''}</span>
+                <span className="truncate">{member.name}</span>
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 export function ServiceRequestFormDialog({
@@ -275,35 +356,23 @@ export function ServiceRequestFormDialog({
             )}
           </FormField>
 
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Watchers</legend>
+          <FormField label="Watchers" htmlFor="sr-watchers">
             {membersLoading ? (
               <p className="text-sm text-slate-500 dark:text-slate-400">Loading people…</p>
-            ) : membersError ? null : members.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">No other people in this workspace yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {members.map((member) => {
-                  const checked = watcherIds.includes(member.id)
-                  return (
-                    <label key={member.id} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={saving}
-                        onChange={() => {
-                          setWatcherIds((current) =>
-                            checked ? current.filter((id) => id !== member.id) : [...current, member.id]
-                          )
-                        }}
-                      />
-                      <span>{member.name}</span>
-                    </label>
-                  )
-                })}
-              </div>
+            ) : membersError ? null : (
+              <WatchersSelect
+                members={[
+                  ...members,
+                  ...(initial?.watchers ?? []).filter(
+                    (person) => !members.some((member) => member.id === person.id)
+                  ),
+                ]}
+                watcherIds={watcherIds}
+                disabled={saving}
+                onChange={setWatcherIds}
+              />
             )}
-          </fieldset>
+          </FormField>
 
           <FormField label={`Related ${assetsLabel.toLowerCase()}`} htmlFor="sr-related-asset">
             {assetsLoading ? (
