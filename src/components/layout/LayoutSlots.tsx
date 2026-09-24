@@ -24,5 +24,10 @@ export function useLayoutSlots() {
 export function HeaderSlot() {
   const slots = useLayoutSlots()
 
-  return <div className="shrink-0" ref={slots?.setHeaderHost ?? undefined} />
+  return (
+    <div
+      className="sticky top-16 z-20 shrink-0 lg:top-0"
+      ref={slots?.setHeaderHost ?? undefined}
+    />
+  )
 }

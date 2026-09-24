@@ -19,9 +19,10 @@ import { ServiceRequestFormDialog } from '@/components/service-requests/ServiceR
 import { getSelectedVertical } from '@/lib/verticalStorage'
 import { getVerticalContent } from '@/lib/verticalContent'
 import { toUserMessage } from '@/lib/userFacingError'
-import { apiService, type ServiceRequest } from '@/services/api'
+import { apiService, peekServiceRequests, type ServiceRequest } from '@/services/api'
 import { cn } from '@/lib/utils'
 import {
+  SERVICE_REQUEST_LIST_PRIORITIES,
   SERVICE_REQUEST_LIST_SORT_FIELDS,
   SERVICE_REQUEST_LIST_STATUSES,
   defaultDirectionForServiceRequestSortField,
@@ -33,6 +34,7 @@ import {
   toServiceRequestListSearchParams,
   toServiceRequestListSort,
   toggleServiceRequestListSortDirection,
+  type ServiceRequestListPriorityFilter,
   type ServiceRequestListQuery,
   type ServiceRequestListSortField,
   type ServiceRequestListStatusFilter,
@@ -54,6 +56,14 @@ const STATUS_LABELS: Record<ServiceRequestListStatusFilter, string> = {
   in_progress: 'In progress',
   resolved: 'Resolved',
   closed: 'Closed',
+}
+
+const PRIORITY_LABELS: Record<ServiceRequestListPriorityFilter, string> = {
+  all: 'All',
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  urgent: 'Urgent',
 }
 
 function priorityVariant(priority: ServiceRequest['priority']) {
@@ -99,8 +109,8 @@ function ServiceRequestsPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const vertical = getVerticalContent(getSelectedVertical())
-  const [requests, setRequests] = useState<ServiceRequest[]>([])
-  const [loading, setLoading] = useState(true)
+  const [requests, setRequests] = useState<ServiceRequest[]>(() => peekServiceRequests() ?? [])
+  const [loading, setLoading] = useState(() => peekServiceRequests() == null)
   const [error, setError] = useState<string | null>(null)
   const createOpen = isCreateOpen(searchParams)
   const [formOpen, setFormOpen] = useState(createOpen)
@@ -148,14 +158,19 @@ function ServiceRequestsPage() {
   }, [setSearchParams])
 
   const loadRequests = useCallback(async () => {
+    const cached = peekServiceRequests()
     try {
-      setLoading(true)
-      setError(null)
+      if (!cached) {
+        setLoading(true)
+        setError(null)
+      }
       const { serviceRequests } = await apiService.getServiceRequests()
       setRequests(serviceRequests)
     } catch (err) {
-      setError(toUserMessage(err))
-      setRequests([])
+      if (!cached) {
+        setError(toUserMessage(err))
+        setRequests([])
+      }
     } finally {
       setLoading(false)
     }
@@ -190,6 +205,40 @@ function ServiceRequestsPage() {
     return counts
   }, [requests])
 
+  const priorityCounts = useMemo(() => {
+    const counts: Record<ServiceRequestListPriorityFilter, number> = {
+      all: requests.length,
+      low: 0,
+      medium: 0,
+      high: 0,
+      urgent: 0,
+    }
+    for (const request of requests) {
+      counts[request.priority] += 1
+    }
+    return counts
+  }, [requests])
+
+  const assetFilters = useMemo(() => {
+    const counts = new Map<string, { id: string; name: string; count: number }>()
+    for (const request of requests) {
+      if (!request.relatedAssetId) continue
+      const existing = counts.get(request.relatedAssetId)
+      if (existing) {
+        existing.count += 1
+        continue
+      }
+      counts.set(request.relatedAssetId, {
+        id: request.relatedAssetId,
+        name: request.relatedAssetName?.trim() || 'Unnamed asset',
+        count: 1,
+      })
+    }
+    return Array.from(counts.values()).sort(
+      (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
+    )
+  }, [requests])
+
   const filtered = useMemo(
     () => filterAndSortServiceRequests(requests, listQuery),
     [requests, listQuery]
@@ -210,7 +259,8 @@ function ServiceRequestsPage() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
             <Input
               type="search"
-              placeholder="Search requests..."
+              placeholder="Search title or description..."
+              aria-label="Search service requests by title or description"
               className="pl-8 w-[240px]"
               value={listQuery.q}
               onChange={(event) => updateListQuery({ q: event.target.value })}
@@ -317,6 +367,43 @@ function ServiceRequestsPage() {
               <span className="text-xs text-slate-500 dark:text-slate-400">{statusCounts[status]}</span>
             </button>
           ))}
+
+          <h2 className="font-semibold text-lg mt-6 mb-4">Priority</h2>
+          {SERVICE_REQUEST_LIST_PRIORITIES.map((priority) => (
+            <button
+              key={priority}
+              type="button"
+              aria-label={`Filter by priority: ${PRIORITY_LABELS[priority]}`}
+              onClick={() => updateListQuery({ priority })}
+              className={sidebarButtonClass(listQuery.priority === priority)}
+            >
+              <span className="flex-1 text-left">{PRIORITY_LABELS[priority]}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{priorityCounts[priority]}</span>
+            </button>
+          ))}
+
+          <h2 className="font-semibold text-lg mt-6 mb-4">Related asset</h2>
+          <button
+            type="button"
+            aria-label="Filter by related asset: All"
+            onClick={() => updateListQuery({ asset: null })}
+            className={sidebarButtonClass(listQuery.asset === null)}
+          >
+            <span className="flex-1 text-left">All</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">{requests.length}</span>
+          </button>
+          {assetFilters.map((asset) => (
+            <button
+              key={asset.id}
+              type="button"
+              aria-label={`Filter by related asset: ${asset.name}`}
+              onClick={() => updateListQuery({ asset: asset.id })}
+              className={sidebarButtonClass(listQuery.asset === asset.id)}
+            >
+              <span className="flex-1 text-left truncate">{asset.name}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{asset.count}</span>
+            </button>
+          ))}
         </div>
 
         <div className="flex-1 overflow-y-auto bg-white dark:bg-slate-800">
@@ -353,7 +440,7 @@ function ServiceRequestsPage() {
             ) : filtered.length === 0 ? (
               <EmptyState
                 title="No requests match this search"
-                description="Try a different title, category, asset, priority, or status."
+                description="Try a different title, description, category, asset, priority, or status."
                 className="py-10"
                 action={
                   serviceRequestListHasFilters(listQuery) ? (

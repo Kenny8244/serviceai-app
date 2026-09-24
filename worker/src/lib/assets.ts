@@ -293,6 +293,99 @@ export async function listWorkspaceAssets(
   return ((data ?? []) as ObjectRow[]).map((row) => mapObjectToAsset(row, userId))
 }
 
+export type AssetStockSample = {
+  objectTypeId: string
+  quantity: number
+  minQuantity: number
+  unitCost?: number | null
+}
+
+export function objectTypeIdsWithQuantity(
+  types: Array<{ id: string; attributes: Array<{ name: string }> }>
+): Set<string> {
+  const ids = new Set<string>()
+  for (const type of types) {
+    if (type.attributes.some((attribute) => attribute.name === 'quantity')) {
+      ids.add(type.id)
+    }
+  }
+  return ids
+}
+
+export function objectTypeIdsWithUnitCost(
+  types: Array<{ id: string; attributes: Array<{ name: string }> }>
+): Set<string> {
+  const ids = new Set<string>()
+  for (const type of types) {
+    const names = new Set(type.attributes.map((attribute) => attribute.name))
+    if (names.has('quantity') && names.has('unit_cost')) ids.add(type.id)
+  }
+  return ids
+}
+
+function inventoryLineValue(sample: AssetStockSample, costTypeIds: ReadonlySet<string>): number {
+  if (!costTypeIds.has(sample.objectTypeId)) return 0
+  const cost = sample.unitCost
+  if (cost == null || !Number.isFinite(cost) || cost < 0) return 0
+  if (!Number.isFinite(sample.quantity) || sample.quantity < 0) return 0
+  return sample.quantity * cost
+}
+
+/** Total is every non-deleted asset. Low stock matches list status LOW: qty > 0 and qty <= min. */
+export function summarizeAssetStock(
+  samples: AssetStockSample[],
+  quantityTypeIds: ReadonlySet<string>,
+  costTypeIds: ReadonlySet<string> = new Set()
+): { total: number; lowStock: number; inventoryValue: number } {
+  let lowStock = 0
+  let inventoryValue = 0
+  for (const sample of samples) {
+    if (quantityTypeIds.has(sample.objectTypeId) && sample.quantity > 0 && sample.quantity <= sample.minQuantity) {
+      lowStock += 1
+    }
+    inventoryValue += inventoryLineValue(sample, costTypeIds)
+  }
+  return { total: samples.length, lowStock, inventoryValue }
+}
+
+export async function countWorkspaceAssetHealth(
+  env: Env,
+  userId: string,
+  preferredWorkspaceId?: string | null
+): Promise<{ total: number; lowStock: number; inventoryValue: number }> {
+  const context = await loadWorkspaceContext(env, userId, preferredWorkspaceId)
+  if (!context) return { total: 0, lowStock: 0, inventoryValue: 0 }
+
+  const types = await listWorkspaceObjectTypes(env, userId, preferredWorkspaceId)
+  const quantityTypeIds = objectTypeIdsWithQuantity(types)
+  const costTypeIds = objectTypeIdsWithUnitCost(types)
+
+  const { data, error } = await context.admin
+    .from('objects')
+    .select('object_type_id, custom_fields')
+    .eq('workspace_id', context.workspaceId)
+    .eq('is_deleted', false)
+
+  if (error) {
+    console.error('Failed to count assets:', error.message)
+    throw new AssetsHttpError('Could not load assets.', 500)
+  }
+
+  const samples: AssetStockSample[] = ((data ?? []) as Array<{ object_type_id?: string; custom_fields?: unknown }>).map(
+    (row) => {
+      const fields = asRecord(row.custom_fields)
+      return {
+        objectTypeId: row.object_type_id ?? '',
+        quantity: asNumber(fields.quantity) ?? 0,
+        minQuantity: asNumber(fields.min_quantity) ?? asNumber(fields.minQuantity) ?? 0,
+        unitCost: asNumber(fields.unit_cost) ?? asNumber(fields.unitCost),
+      }
+    }
+  )
+
+  return summarizeAssetStock(samples, quantityTypeIds, costTypeIds)
+}
+
 export async function getWorkspaceAsset(
   env: Env,
   userId: string,

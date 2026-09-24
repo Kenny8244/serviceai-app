@@ -41,6 +41,8 @@ export type AssetImportSnapshot = {
   skipped: number
   lastAsset: Asset | null
   lastError: string | null
+  label: string | null
+  summary: string | null
 }
 
 const idleSnapshot: AssetImportSnapshot = {
@@ -52,11 +54,32 @@ const idleSnapshot: AssetImportSnapshot = {
   skipped: 0,
   lastAsset: null,
   lastError: null,
+  label: null,
+  summary: null,
 }
+
+const DISMISS_AFTER_MS = 10_000
 
 let snapshot: AssetImportSnapshot = idleSnapshot
 let runId = 0
+let dismissTimer: ReturnType<typeof setTimeout> | null = null
 const listeners = new Set<() => void>()
+
+function clearDismissTimer() {
+  if (dismissTimer == null) return
+  clearTimeout(dismissTimer)
+  dismissTimer = null
+}
+
+function scheduleDismiss(thisRun: number) {
+  clearDismissTimer()
+  dismissTimer = setTimeout(() => {
+    dismissTimer = null
+    if (thisRun !== runId || snapshot.status !== 'done') return
+    snapshot = idleSnapshot
+    emit()
+  }, DISMISS_AFTER_MS)
+}
 
 function emit() {
   listeners.forEach((listener) => listener())
@@ -75,12 +98,14 @@ export function subscribeAssetImport(listener: () => void): () => void {
 
 export function dismissAssetImport() {
   if (snapshot.status === 'running') return
+  clearDismissTimer()
   snapshot = idleSnapshot
   emit()
 }
 
 export function resetAssetImport() {
   runId += 1
+  clearDismissTimer()
   snapshot = idleSnapshot
   emit()
 }
@@ -98,6 +123,8 @@ export function startAssetImport(rows: MappedAssetRow[], skipped = 0) {
     skipped,
     lastAsset: null,
     lastError: null,
+    label: null,
+    summary: null,
   }
   emit()
 
@@ -131,5 +158,54 @@ export function startAssetImport(rows: MappedAssetRow[], skipped = 0) {
     if (thisRun !== runId) return
     snapshot = { ...snapshot, status: 'done' }
     emit()
+    scheduleDismiss(thisRun)
   })()
+}
+
+export function startBackgroundImport(input: {
+  label: string
+  run: () => Promise<{ summary: string; error?: string | null }>
+}): boolean {
+  if (snapshot.status === 'running') return false
+
+  const thisRun = ++runId
+  snapshot = {
+    status: 'running',
+    current: 0,
+    total: 0,
+    imported: 0,
+    failed: 0,
+    skipped: 0,
+    lastAsset: null,
+    lastError: null,
+    label: input.label,
+    summary: null,
+  }
+  emit()
+
+  void (async () => {
+    try {
+      const result = await input.run()
+      if (thisRun !== runId) return
+      snapshot = {
+        ...snapshot,
+        status: 'done',
+        summary: result.summary,
+        lastError: result.error ?? null,
+        failed: result.error ? 1 : 0,
+      }
+    } catch (err) {
+      if (thisRun !== runId) return
+      snapshot = {
+        ...snapshot,
+        status: 'done',
+        failed: 1,
+        lastError: toUserMessage(err),
+      }
+    }
+    emit()
+    scheduleDismiss(thisRun)
+  })()
+
+  return true
 }

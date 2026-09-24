@@ -117,6 +117,7 @@ function LocationProbe() {
 }
 
 function renderAssetsPage(initialPath = '/assets') {
+  mockGoogleSheets()
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
@@ -137,6 +138,19 @@ function renderAssetsPage(initialPath = '/assets') {
 
 function mockObjectTypes() {
   vi.spyOn(apiService, 'getObjectTypes').mockResolvedValue(objectTypes)
+}
+
+function mockGoogleSheets() {
+  vi.spyOn(apiService, 'getGoogleSheetStatus').mockResolvedValue({
+    configured: false,
+    connected: false,
+    spreadsheetId: null,
+    spreadsheetName: null,
+    sheetName: null,
+    lastSyncAt: null,
+    lastError: null,
+    lastResult: null,
+  })
 }
 
 afterEach(() => {

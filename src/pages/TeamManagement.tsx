@@ -12,7 +12,7 @@ import { PageShell } from '@/components/layout/PageShell'
 import { PageTabs } from '@/components/layout/PageTabs'
 import { GradientIcon } from '@/components/layout/GradientIcon'
 import { toUserMessage } from '@/lib/userFacingError'
-import { apiService } from '@/services/api'
+import { apiService, peekServiceRequests } from '@/services/api'
 import type { ServiceRequest, TeamMember, ServiceTicket } from '@/services/api'
 import {
   Users,
@@ -62,21 +62,28 @@ export function TeamManagement() {
   const [activeTab, setActiveTab] = useState('overview')
   const [searchTerm, setSearchTerm] = useState('')
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
-  const [serviceTickets, setServiceTickets] = useState<ServiceTicket[]>([])
+  const [serviceTickets, setServiceTickets] = useState<ServiceTicket[]>(() =>
+    (peekServiceRequests() ?? []).map(mapRequestToTicket)
+  )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [ticketsLoading, setTicketsLoading] = useState(true)
+  const [ticketsLoading, setTicketsLoading] = useState(() => peekServiceRequests() == null)
   const [ticketsError, setTicketsError] = useState<string | null>(null)
 
   const loadTickets = useCallback(async () => {
+    const cached = peekServiceRequests()
     try {
-      setTicketsLoading(true)
-      setTicketsError(null)
+      if (!cached) {
+        setTicketsLoading(true)
+        setTicketsError(null)
+      }
       const { serviceRequests } = await apiService.getServiceRequests()
       setServiceTickets(serviceRequests.map(mapRequestToTicket))
     } catch (err) {
-      setTicketsError(toUserMessage(err))
-      setServiceTickets([])
+      if (!cached) {
+        setTicketsError(toUserMessage(err))
+        setServiceTickets([])
+      }
     } finally {
       setTicketsLoading(false)
     }

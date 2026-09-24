@@ -8,10 +8,17 @@ workers_dev = false
 
 [vars]
 FRONTEND_URL = "https://serviceai-app.pages.dev"
+# Real values live in worker/.dev.vars (local) or Wrangler secrets (production).
+GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_SECRET = ""
+GOOGLE_REDIRECT_URI = ""
 
 [dev]
 ip = "127.0.0.1"
 port = 8787
+
+[triggers]
+crons = ["*/10 * * * *"]
 
 # IDs omitted so the first deploy on a new account can provision KV automatically.
 [[kv_namespaces]]

@@ -4,6 +4,7 @@ import {
   resetAssetImport,
   rowToAssetCreateInput,
   startAssetImport,
+  startBackgroundImport,
   subscribeAssetImport,
 } from '@/lib/assetImportJob'
 import { apiService } from '@/services/api'
@@ -142,5 +143,60 @@ describe('assetImportJob', () => {
       total: 3,
       lastError: 'nope',
     })
+  })
+
+  it('shows a running panel immediately and finishes with a summary', async () => {
+    let release: (value: { summary: string }) => void = () => {}
+    const pending = new Promise<{ summary: string }>((resolve) => {
+      release = resolve
+    })
+
+    const started = startBackgroundImport({
+      label: 'Importing from Google Sheet…',
+      run: () => pending,
+    })
+
+    expect(started).toBe(true)
+    expect(getAssetImportSnapshot()).toMatchObject({
+      status: 'running',
+      total: 0,
+      label: 'Importing from Google Sheet…',
+    })
+    expect(startBackgroundImport({ label: 'again', run: async () => ({ summary: 'no' }) })).toBe(false)
+
+    release({ summary: 'Added 1, updated 0, skipped 0.' })
+    await pending
+    await vi.waitFor(() => {
+      expect(getAssetImportSnapshot().status).toBe('done')
+    })
+    expect(getAssetImportSnapshot()).toMatchObject({
+      summary: 'Added 1, updated 0, skipped 0.',
+      lastError: null,
+    })
+  })
+
+  it('hides the finished panel after 10 seconds', async () => {
+    vi.useFakeTimers()
+    try {
+      let finish: (value: { summary: string }) => void = () => {}
+      const pending = new Promise<{ summary: string }>((resolve) => {
+        finish = resolve
+      })
+      startBackgroundImport({
+        label: 'Importing from Google Sheet…',
+        run: () => pending,
+      })
+      finish({ summary: 'Added 0, updated 17, skipped 2.' })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(getAssetImportSnapshot().status).toBe('done')
+
+      await vi.advanceTimersByTimeAsync(9_999)
+      expect(getAssetImportSnapshot().status).toBe('done')
+
+      await vi.advanceTimersByTimeAsync(1)
+      expect(getAssetImportSnapshot().status).toBe('idle')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

@@ -240,7 +240,7 @@ export function Settings() {
         <div className="space-y-6">
           {/* Company Info */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField label="Company Name" htmlFor="companyName">
+            <FormField label="Workspace name" htmlFor="companyName">
               <Input
                 id="companyName"
                 type="text"
@@ -281,7 +281,7 @@ export function Settings() {
             <div>
               <h4 className="font-medium text-slate-900 dark:text-slate-100">Active vertical</h4>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                Current workspace: {getVerticalDisplayName(getSelectedVertical())}
+                Current vertical: {getVerticalDisplayName(getSelectedVertical())}
               </p>
             </div>
             <Button variant="outline" disabled title="Coming soon">

@@ -8,3 +8,10 @@ SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 
 # JWT signing for API sessions (use a long random string in real environments)
 JWT_SECRET=replace-with-a-long-random-secret
+
+# Google Sheets OAuth (Web client). Leave blank until a client exists;
+# the Assets page then shows that the integration is not configured.
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+# Callback the browser hits. Local Vite proxy:
+# GOOGLE_REDIRECT_URI=http://localhost:5173/api/integrations/google-sheets/callback

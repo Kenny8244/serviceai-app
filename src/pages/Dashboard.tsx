@@ -12,7 +12,8 @@ import { LoadingState, SkeletonBlock } from '@/components/ui/loading-state'
 import { getSelectedVertical } from '@/lib/verticalStorage'
 import { getVerticalContent } from '@/lib/verticalContent'
 import { toUserMessage } from '@/lib/userFacingError'
-import { apiService, type DashboardOverview, type DashboardStat } from '@/services/api'
+import { ActivityChangeLine } from '@/components/service-requests/ActivityChangeLine'
+import { apiService, peekDashboardOverview, type DashboardOverview, type DashboardStat } from '@/services/api'
 import {
   AlertTriangle,
   BarChart3,
@@ -49,23 +50,49 @@ const VERTICAL_ICONS: Record<string, LucideIcon> = {
 }
 
 function MetricCard({ stat }: { stat: DashboardStat }) {
+  const navigate = useNavigate()
   const IconComponent = STAT_ICONS[stat.iconKey] ?? Package
+  const content = (
+    <CardContent className="p-6 h-full flex items-center">
+      <div className="flex w-full items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-slate-600 dark:text-muted-foreground">{stat.label}</p>
+          <p className="text-2xl font-bold text-slate-900 dark:text-foreground truncate">{stat.value}</p>
+        </div>
+        <div className="rounded-lg bg-transparent dark:bg-muted p-0 dark:p-2.5 shrink-0">
+          <IconComponent className="h-8 w-8 dark:h-5 dark:w-5 text-blue-600 dark:text-blue-400 block" />
+        </div>
+      </div>
+    </CardContent>
+  )
+
+  if (!stat.href) {
+    return <Card className="h-full">{content}</Card>
+  }
 
   return (
     <Card className="h-full">
-      <CardContent className="p-6 h-full flex items-center">
-        <div className="flex w-full items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-slate-600 dark:text-muted-foreground">{stat.label}</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-foreground truncate">{stat.value}</p>
-          </div>
-          <div className="rounded-lg bg-transparent dark:bg-muted p-0 dark:p-2.5 shrink-0">
-            <IconComponent className="h-8 w-8 dark:h-5 dark:w-5 text-blue-600 dark:text-blue-400 block" />
-          </div>
-        </div>
-      </CardContent>
+      <button
+        type="button"
+        className="block h-full w-full cursor-pointer rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => navigate(stat.href!)}
+        aria-label={`${stat.label}: ${stat.value}`}
+      >
+        {content}
+      </button>
     </Card>
   )
+}
+
+function formatActivityTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString('en-US', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 function MetricCardSkeleton() {
@@ -93,19 +120,25 @@ export function Dashboard() {
   const vertical = getVerticalContent(selectedVertical)
   const VerticalIcon = VERTICAL_ICONS[vertical.id] ?? ShoppingBag
 
-  const [overview, setOverview] = useState<DashboardOverview | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [overview, setOverview] = useState<DashboardOverview | null>(() => peekDashboardOverview(selectedVertical))
+  const [loading, setLoading] = useState(() => peekDashboardOverview(selectedVertical) == null)
   const [error, setError] = useState<string | null>(null)
 
   const loadOverview = useCallback(async () => {
+    const cached = peekDashboardOverview(selectedVertical)
     try {
-      setLoading(true)
-      setError(null)
+      if (!cached) {
+        setLoading(true)
+        setError(null)
+      }
       const data = await apiService.getDashboardOverview(selectedVertical)
       setOverview(data)
+      setError(null)
     } catch (err) {
-      setError(toUserMessage(err))
-      setOverview(null)
+      if (!cached) {
+        setError(toUserMessage(err))
+        setOverview(null)
+      }
     } finally {
       setLoading(false)
     }
@@ -194,8 +227,23 @@ export function Dashboard() {
               ))}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-              <Card>
+            {overview.aiRecommendation ? (
+              <Card className="mb-6">
+                <CardContent className="flex items-start gap-3 p-6">
+                  <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-900 dark:text-foreground">
+                      {overview.aiRecommendation.title}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600 dark:text-muted-foreground">
+                      {overview.aiRecommendation.detail}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+
+            <Card className="mb-8">
                 <CardHeader>
                   <CardTitle className="text-lg text-slate-900 dark:text-foreground">Recent Activity</CardTitle>
                   <CardDescription className="text-slate-600 dark:text-muted-foreground">
@@ -211,57 +259,62 @@ export function Dashboard() {
                       className="py-8"
                     />
                   ) : (
-                    <div className="space-y-4">
-                      {overview.activities.map((item) => (
-                        <div key={item.title} className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-green-100 dark:bg-emerald-500/10 rounded-full flex items-center justify-center flex-shrink-0">
-                            <CheckCircle className="h-4 w-4 text-green-600 dark:text-emerald-400" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-slate-900 dark:text-foreground">
+                    <div className="max-h-80 overflow-y-auto pr-1">
+                      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {overview.activities.map((item) => {
+                          const time = item.createdAt ? formatActivityTime(item.createdAt) : ''
+                          const title = (
+                            <p className="truncate text-sm font-medium text-slate-900 dark:text-foreground">
                               {item.title}
                             </p>
-                            <p className="text-xs text-slate-600 dark:text-muted-foreground">
-                              {item.detail}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
+                          )
+                          return (
+                            <li key={item.id ?? `${item.title}-${item.detail}`} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-100 dark:bg-emerald-500/10">
+                                <CheckCircle className="h-4 w-4 text-green-600 dark:text-emerald-400" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-3">
+                                  {item.requestId ? (
+                                    <button
+                                      type="button"
+                                      className="min-w-0 flex-1 text-left hover:underline"
+                                      onClick={() => navigate(`/service-requests/${item.requestId}`)}
+                                    >
+                                      {title}
+                                    </button>
+                                  ) : (
+                                    title
+                                  )}
+                                  {time ? (
+                                    <time className="shrink-0 text-xs text-slate-500 dark:text-muted-foreground">
+                                      {time}
+                                    </time>
+                                  ) : null}
+                                </div>
+                                {item.eventType && item.eventType !== 'created' ? (
+                                  <ActivityChangeLine
+                                    change={{
+                                      eventType: item.eventType,
+                                      fromValue: item.fromValue ?? null,
+                                      toValue: item.toValue ?? null,
+                                    }}
+                                    className="text-xs font-normal text-slate-600 dark:text-muted-foreground"
+                                  />
+                                ) : (
+                                  <p className="truncate text-xs text-slate-600 dark:text-muted-foreground">
+                                    {item.detail}
+                                  </p>
+                                )}
+                              </div>
+                            </li>
+                          )
+                        })}
+                      </ul>
                     </div>
                   )}
                 </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center leading-normal text-slate-900 dark:text-foreground">
-                    <Sparkles className="h-5 w-5 mr-2 text-blue-600 dark:text-blue-400 shrink-0" />
-                    AI Recommendation
-                  </CardTitle>
-                  <CardDescription className="text-slate-600 dark:text-muted-foreground">
-                    Suggested next step for this workspace
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {overview.aiRecommendation ? (
-                    <div>
-                      <p className="text-sm font-medium text-slate-900 dark:text-foreground">
-                        {overview.aiRecommendation.title}
-                      </p>
-                      <p className="text-sm text-slate-600 dark:text-muted-foreground mt-1">
-                        {overview.aiRecommendation.detail}
-                      </p>
-                    </div>
-                  ) : (
-                    <EmptyState
-                      title="No recommendations yet"
-                      description="Recommendations will appear as your workspace collects data."
-                      className="py-8"
-                    />
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+            </Card>
           </>
         )}
 

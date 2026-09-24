@@ -26,15 +26,13 @@ export function ImportProgressPanel() {
           <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Import</p>
           {running ? (
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {snapshot.current} of {snapshot.total}
+              {snapshot.label ?? `${snapshot.current} of ${snapshot.total}`}
             </p>
           ) : (
             <>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Imported {snapshot.imported}
-                {snapshot.imported === 1 ? ' item' : ' items'}
-                {snapshot.failed > 0 ? `, ${snapshot.failed} failed` : ''}
-                {snapshot.skipped > 0 ? `, ${snapshot.skipped} skipped` : ''}
+                {snapshot.summary ??
+                  `Imported ${snapshot.imported}${snapshot.imported === 1 ? ' item' : ' items'}${snapshot.failed > 0 ? `, ${snapshot.failed} failed` : ''}${snapshot.skipped > 0 ? `, ${snapshot.skipped} skipped` : ''}`}
               </p>
               {snapshot.lastError ? (
                 <p className="mt-1 text-xs text-red-600 dark:text-red-400">{snapshot.lastError}</p>
@@ -48,7 +46,12 @@ export function ImportProgressPanel() {
           </Button>
         )}
       </div>
-      {running ? <Progress value={percent} className="h-1.5" /> : null}
+      {running && snapshot.total > 0 ? <Progress value={percent} className="h-1.5" /> : null}
+      {running && snapshot.total === 0 ? (
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+          <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
+        </div>
+      ) : null}
     </div>
   )
 }

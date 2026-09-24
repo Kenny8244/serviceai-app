@@ -1,4 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  createdActivityChange,
+  activityEventLabel,
+  lifecycleActivityChanges,
+  type ServiceRequestActivityChange,
+} from '../../../src/lib/serviceRequestActivity'
 import type { Env, ServiceRequest } from '../types'
 import { resolvePreferredWorkspaceId } from './authAccount'
 import { getSupabaseAdmin, SUPABASE_CONFIG_HINT } from './supabase'
@@ -323,6 +329,28 @@ async function hydrateServiceRequests(
   })
 }
 
+export async function countOpenWorkspaceServiceRequests(
+  env: Env,
+  userId: string,
+  preferredWorkspaceId?: string | null
+): Promise<number> {
+  const context = await loadWorkspaceContext(env, userId, preferredWorkspaceId)
+  if (!context) return 0
+
+  const { count, error } = await context.admin
+    .from('service_requests')
+    .select('ticket_id', { count: 'exact', head: true })
+    .eq('workspace_id', context.workspaceId)
+    .eq('status', 'open')
+
+  if (error) {
+    console.error('Failed to count open service requests:', error.message)
+    throw new ServiceRequestsHttpError('Could not count open service requests.', 500)
+  }
+
+  return count ?? 0
+}
+
 export async function listWorkspaceServiceRequests(
   env: Env,
   userId: string,
@@ -441,6 +469,9 @@ export async function createWorkspaceServiceRequest(
 
   const created = data as ServiceRequestRow
   await replaceWatchers(context.admin, context.workspaceId, created.ticket_id, watcherIds)
+  await insertActivityEvents(context.admin, context.workspaceId, created.ticket_id, userId, [
+    createdActivityChange(created.status),
+  ])
   const [request] = await hydrateServiceRequests(context.admin, context.workspaceId, [created], userId)
   if (!request) {
     throw new ServiceRequestsHttpError('Could not create service request.', 500)
@@ -526,6 +557,22 @@ export async function updateWorkspaceServiceRequest(
     await replaceWatchers(context.admin, context.workspaceId, requestId, watcherIds)
   }
 
+  const updated = data as ServiceRequestRow
+  try {
+    await insertActivityEvents(
+      context.admin,
+      context.workspaceId,
+      requestId,
+      userId,
+      lifecycleActivityChanges(
+        { status: existing.status, priority: existing.priority },
+        { status: updated.status, priority: updated.priority }
+      )
+    )
+  } catch (activityError) {
+    console.error('Service request saved, but activity was not recorded:', activityError)
+  }
+
   const [request] = await hydrateServiceRequests(
     context.admin,
     context.workspaceId,
@@ -536,4 +583,163 @@ export async function updateWorkspaceServiceRequest(
     throw new ServiceRequestsHttpError('Could not update service request.', 500)
   }
   return request
+}
+
+export type ServiceRequestActivity = {
+  id: string
+  eventType: ServiceRequestActivityChange['eventType']
+  fromValue: string | null
+  toValue: string | null
+  actorUserId: string | null
+  actorName: string | null
+  createdAt: string
+}
+
+type ActivityRow = {
+  id: string
+  event_type: ServiceRequestActivityChange['eventType']
+  from_value: string | null
+  to_value: string | null
+  actor_user_id: string | null
+  created_at: string
+}
+
+async function insertActivityEvents(
+  admin: SupabaseClient,
+  workspaceId: string,
+  ticketId: string,
+  actorUserId: string,
+  changes: ServiceRequestActivityChange[]
+): Promise<void> {
+  if (changes.length === 0) return
+
+  const { error } = await admin.from('service_request_activity').insert(
+    changes.map((change) => ({
+      workspace_id: workspaceId,
+      ticket_id: ticketId,
+      actor_user_id: actorUserId,
+      event_type: change.eventType,
+      from_value: change.fromValue,
+      to_value: change.toValue,
+    }))
+  )
+
+  if (error) {
+    console.error('Failed to record service request activity:', error.message)
+    throw new ServiceRequestsHttpError('Could not record service request activity.', 500)
+  }
+}
+
+export async function listWorkspaceServiceRequestActivity(
+  env: Env,
+  userId: string,
+  requestId: string,
+  preferredWorkspaceId?: string | null
+): Promise<ServiceRequestActivity[] | null> {
+  const existing = await getWorkspaceServiceRequest(env, userId, requestId, preferredWorkspaceId)
+  if (!existing) return null
+
+  const context = await loadWorkspaceContext(env, userId, preferredWorkspaceId)
+  if (!context) {
+    throw new ServiceRequestsHttpError('Active workspace is required. Select a workspace first.', 400)
+  }
+
+  const { data, error } = await context.admin
+    .from('service_request_activity')
+    .select('id, event_type, from_value, to_value, actor_user_id, created_at')
+    .eq('workspace_id', context.workspaceId)
+    .eq('ticket_id', requestId)
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+
+  if (error) {
+    console.error('Failed to load service request activity:', error.message)
+    throw new ServiceRequestsHttpError('Could not load service request activity.', 500)
+  }
+
+  const rows = (data ?? []) as ActivityRow[]
+  const names = await loadProfileNames(
+    context.admin,
+    rows.flatMap((row) => (row.actor_user_id ? [row.actor_user_id] : []))
+  )
+
+  return rows.map((row) => ({
+    id: row.id,
+    eventType: row.event_type,
+    fromValue: row.from_value,
+    toValue: row.to_value,
+    actorUserId: row.actor_user_id,
+    actorName: row.actor_user_id ? (names.get(row.actor_user_id) ?? null) : null,
+    createdAt: row.created_at,
+  }))
+}
+
+export type RecentWorkspaceActivity = {
+  id: string
+  title: string
+  detail: string
+  createdAt: string
+  requestId: string
+  eventType: 'created' | 'status_changed' | 'priority_changed'
+  fromValue: string | null
+  toValue: string | null
+}
+
+export async function listRecentWorkspaceActivity(
+  env: Env,
+  userId: string,
+  preferredWorkspaceId?: string | null,
+  limit = 8
+): Promise<RecentWorkspaceActivity[]> {
+  const context = await loadWorkspaceContext(env, userId, preferredWorkspaceId)
+  if (!context) return []
+
+  const { data, error } = await context.admin
+    .from('service_request_activity')
+    .select('id, ticket_id, event_type, from_value, to_value, created_at')
+    .eq('workspace_id', context.workspaceId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    console.error('Failed to load recent service request activity:', error.message)
+    throw new ServiceRequestsHttpError('Could not load recent activity.', 500)
+  }
+
+  const rows = (data ?? []) as Array<ActivityRow & { ticket_id: string }>
+  if (rows.length === 0) return []
+
+  const ticketIds = [...new Set(rows.map((row) => row.ticket_id))]
+  const { data: tickets, error: ticketError } = await context.admin
+    .from('service_requests')
+    .select('ticket_id, title')
+    .eq('workspace_id', context.workspaceId)
+    .in('ticket_id', ticketIds)
+
+  if (ticketError) {
+    console.error('Failed to load activity request titles:', ticketError.message)
+    throw new ServiceRequestsHttpError('Could not load recent activity.', 500)
+  }
+
+  const titles = new Map(
+    ((tickets ?? []) as Array<{ ticket_id: string; title: string | null }>).map((ticket) => [
+      ticket.ticket_id,
+      ticket.title?.trim() || 'Service request',
+    ])
+  )
+
+  return rows.map((row) => ({
+    id: row.id,
+    requestId: row.ticket_id,
+    title: titles.get(row.ticket_id) || 'Service request',
+    detail: activityEventLabel({
+      eventType: row.event_type,
+      fromValue: row.from_value,
+      toValue: row.to_value,
+    }),
+    eventType: row.event_type,
+    fromValue: row.from_value,
+    toValue: row.to_value,
+    createdAt: row.created_at,
+  }))
 }

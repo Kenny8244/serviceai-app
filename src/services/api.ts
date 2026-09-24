@@ -1,4 +1,5 @@
 import { isPublicAuthUrl, notifyAuthSessionChanged } from '@/lib/authSession';
+import { createShellCache } from '@/lib/shellDataCache';
 import {
   clearActiveWorkspaceId,
   getActiveWorkspaceId,
@@ -79,6 +80,16 @@ export interface LoginRequest {
 export interface ServiceRequestPerson {
   id: string
   name: string
+}
+
+export interface ServiceRequestActivity {
+  id: string
+  eventType: 'created' | 'status_changed' | 'priority_changed'
+  fromValue: string | null
+  toValue: string | null
+  actorUserId: string | null
+  actorName: string | null
+  createdAt: string
 }
 
 export interface ServiceRequest {
@@ -170,6 +181,29 @@ export interface UpdateServiceRequest {
   watcherIds?: string[];
 }
 
+export type GoogleSheetSyncCounts = {
+  created: number
+  updated: number
+  skipped: number
+}
+
+export type GoogleSheetStatus = {
+  configured: boolean
+  connected: boolean
+  spreadsheetId: string | null
+  spreadsheetName: string | null
+  sheetName: string | null
+  lastSyncAt: string | null
+  lastError: string | null
+  lastResult: GoogleSheetSyncCounts | null
+}
+
+export type GoogleSpreadsheetOption = {
+  id: string
+  name: string
+  modifiedTime: string | null
+}
+
 export interface Asset {
   id: string
   name: string
@@ -259,6 +293,25 @@ function normalizePeople(value: unknown): ServiceRequestPerson[] {
   return value
     .map(normalizePerson)
     .filter((person): person is ServiceRequestPerson => person != null)
+}
+
+function normalizeServiceRequestActivity(rawValue: unknown): ServiceRequestActivity {
+  const raw = asRecord(rawValue)
+  const eventType = String(pickRaw(raw, 'eventType', 'event_type') ?? 'created')
+  const fromValue = pickRaw(raw, 'fromValue', 'from_value')
+  const toValue = pickRaw(raw, 'toValue', 'to_value')
+  const actorUserId = pickRaw(raw, 'actorUserId', 'actor_user_id')
+  const actorName = pickRaw(raw, 'actorName', 'actor_name')
+  return {
+    id: String(raw.id ?? ''),
+    eventType:
+      eventType === 'status_changed' || eventType === 'priority_changed' ? eventType : 'created',
+    fromValue: fromValue == null || fromValue === '' ? null : String(fromValue),
+    toValue: toValue == null || toValue === '' ? null : String(toValue),
+    actorUserId: actorUserId == null || actorUserId === '' ? null : String(actorUserId),
+    actorName: actorName == null || actorName === '' ? null : String(actorName),
+    createdAt: String(pickRaw(raw, 'createdAt', 'created_at') ?? ''),
+  }
 }
 
 function normalizeServiceRequest(rawValue: unknown): ServiceRequest {
@@ -395,11 +448,18 @@ export interface DashboardStat {
   label: string
   value: string
   iconKey: DashboardStatIconKey | string
+  href?: string
 }
 
 export interface DashboardActivity {
+  id?: string
   title: string
   detail: string
+  createdAt?: string
+  requestId?: string
+  eventType?: 'created' | 'status_changed' | 'priority_changed'
+  fromValue?: string | null
+  toValue?: string | null
 }
 
 export interface DashboardOverview {
@@ -409,6 +469,31 @@ export interface DashboardOverview {
     title: string
     detail: string
   }
+}
+
+const dashboardCache = createShellCache<DashboardOverview>()
+let cachedDashboardVertical = ''
+const assetsCache = createShellCache<Asset[]>()
+const serviceRequestsCache = createShellCache<ServiceRequest[]>()
+
+export function peekDashboardOverview(verticalId: string): DashboardOverview | null {
+  if (cachedDashboardVertical !== verticalId) return null
+  return dashboardCache.peek()
+}
+
+export function peekAssets(): Asset[] | null {
+  return assetsCache.peek()
+}
+
+export function peekServiceRequests(): ServiceRequest[] | null {
+  return serviceRequestsCache.peek()
+}
+
+export function clearShellDataCache(): void {
+  dashboardCache.clear()
+  assetsCache.clear()
+  serviceRequestsCache.clear()
+  cachedDashboardVertical = ''
 }
 
 class ApiService {
@@ -649,14 +734,15 @@ class ApiService {
 
   // Service Request endpoints
   async getServiceRequests(): Promise<{ serviceRequests: ServiceRequest[] }> {
-    const response = await fetch(`${API_BASE_URL}/service-requests`, {
-      method: 'GET',
-      headers: this.getAuthHeaders(),
-    });
-    const data = await this.handleResponse<{ serviceRequests?: unknown[] }>(response);
-    return {
-      serviceRequests: (data.serviceRequests ?? []).map(normalizeServiceRequest),
-    };
+    const serviceRequests = await serviceRequestsCache.load(async () => {
+      const response = await fetch(`${API_BASE_URL}/service-requests`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+      const data = await this.handleResponse<{ serviceRequests?: unknown[] }>(response);
+      return (data.serviceRequests ?? []).map(normalizeServiceRequest);
+    })
+    return { serviceRequests }
   }
 
   async createServiceRequest(serviceRequest: CreateServiceRequest): Promise<{ serviceRequest: ServiceRequest }> {
@@ -666,6 +752,7 @@ class ApiService {
       body: JSON.stringify(serviceRequest),
     });
     const data = await this.handleResponse<{ serviceRequest: unknown }>(response);
+    clearShellDataCache();
     return { serviceRequest: normalizeServiceRequest(data.serviceRequest) };
   }
 
@@ -678,6 +765,17 @@ class ApiService {
     return { serviceRequest: normalizeServiceRequest(data.serviceRequest) };
   }
 
+  async getServiceRequestActivity(id: string): Promise<{ activities: ServiceRequestActivity[] }> {
+    const response = await fetch(`${API_BASE_URL}/service-requests/${id}/activity`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    });
+    const data = await this.handleResponse<{ activities?: unknown[] }>(response);
+    return {
+      activities: (data.activities ?? []).map(normalizeServiceRequestActivity),
+    };
+  }
+
   async updateServiceRequest(
     id: string,
     updates: UpdateServiceRequest
@@ -688,17 +786,31 @@ class ApiService {
       body: JSON.stringify(updates),
     });
     const data = await this.handleResponse<{ serviceRequest: unknown }>(response);
+    clearShellDataCache();
     return { serviceRequest: normalizeServiceRequest(data.serviceRequest) };
   }
 
   // Dashboard endpoints
   async getDashboardOverview(verticalId: string): Promise<DashboardOverview> {
-    const params = new URLSearchParams({ verticalId });
-    const response = await fetch(`${API_BASE_URL}/dashboard/overview?${params.toString()}`, {
-      method: 'GET',
-      headers: this.getAuthHeaders(),
-    });
-    return this.handleResponse<DashboardOverview>(response);
+    if (cachedDashboardVertical !== verticalId) {
+      dashboardCache.clear()
+      cachedDashboardVertical = verticalId
+    }
+    return dashboardCache.load(async () => {
+      const params = new URLSearchParams({ verticalId });
+      const response = await fetch(`${API_BASE_URL}/dashboard/overview?${params.toString()}`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+      return this.handleResponse<DashboardOverview>(response);
+    })
+  }
+
+  prefetchShell(verticalId: string): void {
+    void this.getDashboardOverview(verticalId).catch(() => undefined)
+    void this.getAssets().catch(() => undefined)
+    void this.getObjectTypes().catch(() => undefined)
+    void this.getServiceRequests().catch(() => undefined)
   }
 
   async getDashboardMetrics() {
@@ -926,6 +1038,68 @@ class ApiService {
     return this.handleResponse(response);
   }
 
+  async getGoogleSheetStatus(): Promise<GoogleSheetStatus> {
+    const response = await fetch(`${API_BASE_URL}/integrations/google-sheets`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    })
+    return this.handleResponse(response)
+  }
+
+  async connectGoogleSheet(): Promise<{ url: string }> {
+    const response = await fetch(`${API_BASE_URL}/integrations/google-sheets/connect`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    })
+    return this.handleResponse(response)
+  }
+
+  async listGoogleSpreadsheets(): Promise<{ spreadsheets: GoogleSpreadsheetOption[] }> {
+    const response = await fetch(`${API_BASE_URL}/integrations/google-sheets/spreadsheets`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    })
+    return this.handleResponse(response)
+  }
+
+  async listGoogleSheetTabs(spreadsheetId: string): Promise<{ sheets: string[] }> {
+    const query = new URLSearchParams({ spreadsheetId })
+    const response = await fetch(`${API_BASE_URL}/integrations/google-sheets/tabs?${query}`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+    })
+    return this.handleResponse(response)
+  }
+
+  async linkGoogleSheet(input: {
+    spreadsheetId: string
+    spreadsheetName?: string
+    sheetName: string
+  }): Promise<GoogleSheetStatus> {
+    const response = await fetch(`${API_BASE_URL}/integrations/google-sheets/link`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify(input),
+    })
+    return this.handleResponse(response)
+  }
+
+  async syncGoogleSheet(): Promise<GoogleSheetStatus> {
+    const response = await fetch(`${API_BASE_URL}/integrations/google-sheets/sync`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+    })
+    return this.handleResponse(response)
+  }
+
+  async disconnectGoogleSheet(): Promise<GoogleSheetStatus> {
+    const response = await fetch(`${API_BASE_URL}/integrations/google-sheets`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+    })
+    return this.handleResponse(response)
+  }
+
   // Asset Management endpoints
   async getAssets(filters: {
     category?: string
@@ -944,13 +1118,19 @@ class ApiService {
     if (filters.lowStock) queryParams.append('lowStock', 'true');
     if (filters.page) queryParams.append('page', filters.page.toString());
     if (filters.limit) queryParams.append('limit', filters.limit.toString());
+    const unfiltered = queryParams.size === 0
 
-    const response = await fetch(`${API_BASE_URL}/assets?${queryParams.toString()}`, {
-      method: 'GET',
-      headers: this.getAuthHeaders(),
-    });
-    const data = await this.handleResponse<unknown>(response);
-    return asAssetList(data).map(normalizeAsset);
+    const load = async () => {
+      const response = await fetch(`${API_BASE_URL}/assets?${queryParams.toString()}`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+      const data = await this.handleResponse<unknown>(response);
+      return asAssetList(data).map(normalizeAsset);
+    }
+
+    if (!unfiltered) return load()
+    return assetsCache.load(load)
   }
 
   async getAssetById(assetId: string): Promise<Asset> {
@@ -982,6 +1162,7 @@ class ApiService {
       body: JSON.stringify(assetData),
     });
     const data = await this.handleResponse<unknown>(response);
+    clearShellDataCache();
     return normalizeAsset(data);
   }
 
@@ -1008,6 +1189,7 @@ class ApiService {
       body: JSON.stringify(updates),
     });
     const data = await this.handleResponse<unknown>(response);
+    clearShellDataCache();
     return normalizeAsset(data);
   }
 
@@ -1016,7 +1198,9 @@ class ApiService {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
-    return this.handleResponse(response);
+    const data = await this.handleResponse(response);
+    clearShellDataCache();
+    return data;
   }
 
   async getArchivedAssets(): Promise<Asset[]> {
@@ -1033,7 +1217,9 @@ class ApiService {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
     });
-    return this.handleResponse(response);
+    const deleted = await this.handleResponse(response);
+    clearShellDataCache();
+    return deleted;
   }
 
   /** @deprecated Use archiveAsset — DELETE soft-archives the asset. */
@@ -1222,6 +1408,7 @@ class ApiService {
     clearActiveWorkspaceId();
     clearCachedWorkspacePreferences();
     clearObjectTypesCache();
+    clearShellDataCache();
     if (hadToken && options?.notify !== false) {
       notifyAuthSessionChanged();
     }

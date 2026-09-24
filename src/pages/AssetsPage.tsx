@@ -9,11 +9,12 @@ import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState, SkeletonBlock } from '@/components/ui/loading-state'
 import { PageShell } from '@/components/layout/PageShell'
 import { AssetAvatar, AssetFormDialog } from '@/components/assets/AssetDialogs'
+import { GoogleSheetSyncPanel } from '@/components/import/GoogleSheetSyncPanel'
 import { getAssetImportSnapshot, subscribeAssetImport } from '@/lib/assetImportJob'
 import { getSelectedVertical } from '@/lib/verticalStorage'
 import { getVerticalContent } from '@/lib/verticalContent'
 import { toUserMessage } from '@/lib/userFacingError'
-import { apiService, type Asset, type ObjectType } from '@/services/api'
+import { apiService, peekAssets, type Asset, type ObjectType } from '@/services/api'
 import { cn } from '@/lib/utils'
 import { assetHasQuantityField, getStockStatus, type StockStatus } from '@/lib/objectTypeSchema'
 import {
@@ -57,8 +58,8 @@ function AssetsPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const vertical = getVerticalContent(getSelectedVertical())
-  const [assets, setAssets] = useState<Asset[]>([])
-  const [loading, setLoading] = useState(true)
+  const [assets, setAssets] = useState<Asset[]>(() => peekAssets() ?? [])
+  const [loading, setLoading] = useState(() => peekAssets() == null)
   const [error, setError] = useState<string | null>(null)
   const [formTarget, setFormTarget] = useState<'new' | null>(null)
   const [objectTypes, setObjectTypes] = useState<ObjectType[]>([])
@@ -98,7 +99,7 @@ function AssetsPage() {
   const loadAssets = useCallback(async (options?: { quiet?: boolean }) => {
     const quiet = Boolean(options?.quiet)
     try {
-      if (!quiet) {
+      if (!quiet && peekAssets() == null) {
         setLoading(true)
         setError(null)
       }
@@ -298,6 +299,7 @@ function AssetsPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto bg-white dark:bg-slate-800">
+          <GoogleSheetSyncPanel onImported={() => void loadAssets({ quiet: true })} />
           <div className="p-2 space-y-1">
             {loading ? (
               <LoadingState variant="skeleton" label="Loading assets" className="space-y-2 p-2">

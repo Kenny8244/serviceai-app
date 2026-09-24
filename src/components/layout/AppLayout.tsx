@@ -4,6 +4,8 @@ import { Menu } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { Button } from '@/components/ui/button'
 import { getDesktopSidebarCollapsed, setDesktopSidebarCollapsed } from '@/lib/sidebarStorage'
+import { getSelectedVertical } from '@/lib/verticalStorage'
+import { apiService } from '@/services/api'
 import { HeaderSlot, LayoutSlotsProvider } from './LayoutSlots'
 import { ImportProgressPanel } from './ImportProgressPanel'
 
@@ -31,6 +33,10 @@ export function AppLayout() {
   useEffect(() => {
     setMobileOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    apiService.prefetchShell(getSelectedVertical())
+  }, [])
 
   useEffect(() => {
     const media = window.matchMedia(DESKTOP_QUERY)

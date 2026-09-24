@@ -82,3 +82,4 @@ db/migrations/20260909120000_scrum34_object_type_attributes.sql
 db/migrations/20260909180000_scrum42_reorder_threshold_label.sql
 db/README.md
 db/migrations/20260922120000_service_request_owner_watchers.sql
+db/migrations/20260924120000_scrum50_service_request_activity.sql

@@ -47,10 +47,15 @@ export const SERVICE_REQUEST_LIST_STATUSES = [
 ] as const
 export type ServiceRequestListStatusFilter = (typeof SERVICE_REQUEST_LIST_STATUSES)[number]
 
+export const SERVICE_REQUEST_LIST_PRIORITIES = ['all', 'low', 'medium', 'high', 'urgent'] as const
+export type ServiceRequestListPriorityFilter = (typeof SERVICE_REQUEST_LIST_PRIORITIES)[number]
+
 export type ServiceRequestListQuery = {
   q: string
   category: string | null
   status: ServiceRequestListStatusFilter
+  priority: ServiceRequestListPriorityFilter
+  asset: string | null
   sort: ServiceRequestListSort
 }
 
@@ -58,6 +63,8 @@ export const DEFAULT_SERVICE_REQUEST_LIST_QUERY: ServiceRequestListQuery = {
   q: '',
   category: null,
   status: 'all',
+  priority: 'all',
+  asset: null,
   sort: 'updated-desc',
 }
 
@@ -69,14 +76,22 @@ function isStatus(value: string | null): value is ServiceRequestListStatusFilter
   return SERVICE_REQUEST_LIST_STATUSES.includes(value as ServiceRequestListStatusFilter)
 }
 
+function isPriority(value: string | null): value is ServiceRequestListPriorityFilter {
+  return SERVICE_REQUEST_LIST_PRIORITIES.includes(value as ServiceRequestListPriorityFilter)
+}
+
 export function parseServiceRequestListParams(params: URLSearchParams): ServiceRequestListQuery {
   const category = params.get('category')?.trim() || null
+  const asset = params.get('asset')?.trim() || null
   const statusRaw = params.get('status')
+  const priorityRaw = params.get('priority')
   const sortRaw = params.get('sort')
   return {
     q: params.get('q')?.trim() ?? '',
     category,
     status: isStatus(statusRaw) ? statusRaw : 'all',
+    priority: isPriority(priorityRaw) ? priorityRaw : 'all',
+    asset,
     sort: isSort(sortRaw) ? sortRaw : 'updated-desc',
   }
 }
@@ -87,6 +102,8 @@ export function toServiceRequestListSearchParams(query: ServiceRequestListQuery)
   if (q) params.set('q', q)
   if (query.category) params.set('category', query.category)
   if (query.status !== 'all') params.set('status', query.status)
+  if (query.priority !== 'all') params.set('priority', query.priority)
+  if (query.asset) params.set('asset', query.asset)
   if (query.sort !== 'updated-desc') params.set('sort', query.sort)
   return params
 }
@@ -96,18 +113,24 @@ export function serviceRequestListHasFilters(query: ServiceRequestListQuery): bo
     Boolean(query.q.trim()) ||
     Boolean(query.category) ||
     query.status !== 'all' ||
+    query.priority !== 'all' ||
+    Boolean(query.asset) ||
     query.sort !== DEFAULT_SERVICE_REQUEST_LIST_QUERY.sort
   )
 }
 
 export function serviceRequestMatchesSearch(
-  request: Pick<ServiceRequest, 'title' | 'category' | 'priority' | 'status' | 'relatedAssetName'>,
+  request: Pick<
+    ServiceRequest,
+    'title' | 'description' | 'category' | 'priority' | 'status' | 'relatedAssetName'
+  >,
   query: string
 ): boolean {
   const needle = query.trim().toLowerCase()
   if (!needle) return true
   const haystack = [
     request.title,
+    request.description,
     request.category,
     request.priority,
     request.status,
@@ -130,6 +153,8 @@ export function filterAndSortServiceRequests(
   const filtered = requests.filter((request) => {
     if (query.category && (request.category || 'General') !== query.category) return false
     if (query.status !== 'all' && request.status !== query.status) return false
+    if (query.priority !== 'all' && request.priority !== query.priority) return false
+    if (query.asset && request.relatedAssetId !== query.asset) return false
     return serviceRequestMatchesSearch(request, query.q)
   })
 

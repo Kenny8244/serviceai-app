@@ -20,11 +20,14 @@ import {
   findUserById,
   selectVertical,
 } from './lib/store'
-import { AssetsHttpError, archiveWorkspaceAsset, createWorkspaceAsset, getWorkspaceAsset, listArchivedWorkspaceAssets, listWorkspaceAssets, permanentlyDeleteWorkspaceAsset, updateWorkspaceAsset } from './lib/assets'
+import { AssetsHttpError, archiveWorkspaceAsset, countWorkspaceAssetHealth, createWorkspaceAsset, getWorkspaceAsset, listArchivedWorkspaceAssets, listWorkspaceAssets, permanentlyDeleteWorkspaceAsset, updateWorkspaceAsset } from './lib/assets'
 import {
   ServiceRequestsHttpError,
+  countOpenWorkspaceServiceRequests,
   createWorkspaceServiceRequest,
   getWorkspaceServiceRequest,
+  listRecentWorkspaceActivity,
+  listWorkspaceServiceRequestActivity,
   listWorkspaceServiceRequests,
   updateWorkspaceServiceRequest,
 } from './lib/serviceRequests'
@@ -44,6 +47,8 @@ import {
   listWorkspaceMembers,
   updateWorkspacePreferences,
 } from './lib/workspaces'
+import { mountGoogleSheetRoutes } from './lib/googleSheetRoutes'
+import { syncAllLinkedSheets } from './lib/sheetSync'
 import { isValidVerticalId, resolveUserVertical, saveTenantVertical } from './lib/tenantVertical'
 import { getSupabaseConfigStatus } from './lib/supabase'
 import {
@@ -54,6 +59,7 @@ import {
   ANALYTICS_OVERVIEW,
   DEFAULT_SETTINGS,
   TEAM_MEMBERS,
+  applyLiveAssetStats,
   getDashboardOverview,
 } from './lib/mocks'
 
@@ -475,9 +481,46 @@ app.put('/api/workspaces/preferences', requireAuth, async (c) => {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-app.get('/api/dashboard/overview', (c) => {
+app.get('/api/dashboard/overview', async (c) => {
   const verticalId = c.req.query('verticalId')
-  return c.json(getDashboardOverview(verticalId))
+  const overview = getDashboardOverview(verticalId)
+  const header = c.req.header('authorization')
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : null
+  if (!token) return c.json(overview)
+
+  const payload = await verifyToken(c.env, token)
+  if (!payload) return c.json(overview)
+
+  const [openResult, assetResult, activityResult] = await Promise.allSettled([
+    countOpenWorkspaceServiceRequests(c.env, payload.userId, payload.workspaceId),
+    countWorkspaceAssetHealth(c.env, payload.userId, payload.workspaceId),
+    listRecentWorkspaceActivity(c.env, payload.userId, payload.workspaceId),
+  ])
+
+  if (assetResult.status === 'rejected') {
+    console.error('Dashboard asset counts failed:', assetResult.reason)
+    return c.json({ error: 'Could not load the dashboard' }, 500)
+  }
+
+  let stats = overview.stats
+  if (openResult.status === 'fulfilled') {
+    stats = stats.map((stat) =>
+      stat.label === 'Open Service Requests'
+        ? { ...stat, value: String(openResult.value), href: '/service-requests?status=open' }
+        : stat
+    )
+  } else {
+    console.error('Dashboard open service request count failed:', openResult.reason)
+  }
+
+  stats = applyLiveAssetStats(stats, assetResult.value)
+
+  if (activityResult.status === 'fulfilled') {
+    return c.json({ ...overview, stats, activities: activityResult.value })
+  }
+
+  console.error('Dashboard recent activity failed:', activityResult.reason)
+  return c.json({ ...overview, stats })
 })
 
 app.get('/api/dashboard/metrics', requireAuth, (c) =>
@@ -503,7 +546,18 @@ app.get('/api/dashboard/quick-stats', requireAuth, (c) =>
 app.get('/api/dashboard/products/count', requireAuth, (c) => c.json({ count: 247 }))
 app.get('/api/dashboard/customers/active', requireAuth, (c) => c.json({ count: 89 }))
 app.get('/api/dashboard/revenue/monthly', requireAuth, (c) => c.json({ revenue: 12450 }))
-app.get('/api/dashboard/activity/recent', requireAuth, (c) => c.json({ activities: [] }))
+app.get('/api/dashboard/activity/recent', requireAuth, async (c) => {
+  try {
+    const user = c.get('user')
+    const activities = await listRecentWorkspaceActivity(c.env, user.userId, user.workspaceId)
+    return c.json({ activities })
+  } catch (error) {
+    const domain = handleDomainError(error)
+    if (domain) return c.json({ error: domain.error }, domain.status)
+    console.error('Recent activity failed:', error)
+    return c.json({ error: 'Could not load recent activity' }, 500)
+  }
+})
 app.post('/api/assistant/query', requireAuth, async (c) => {
   const { query } = await c.req.json<{ query: string }>()
   return c.json({
@@ -564,6 +618,25 @@ app.post('/api/service-requests', requireAuth, async (c) => {
     if (domain) return c.json({ error: domain.error }, domain.status)
     console.error('Create service request failed:', error)
     return c.json({ error: 'Could not create service request' }, 500)
+  }
+})
+
+app.get('/api/service-requests/:id/activity', requireAuth, async (c) => {
+  try {
+    const user = c.get('user')
+    const activities = await listWorkspaceServiceRequestActivity(
+      c.env,
+      user.userId,
+      c.req.param('id'),
+      user.workspaceId
+    )
+    if (!activities) return c.json({ error: 'Service request not found' }, 404)
+    return c.json({ activities })
+  } catch (error) {
+    const domain = handleDomainError(error)
+    if (domain) return c.json({ error: domain.error }, domain.status)
+    console.error('List service request activity failed:', error)
+    return c.json({ error: 'Could not load service request activity' }, 500)
   }
 })
 
@@ -952,6 +1025,13 @@ app.get('/api/onboarding/preferences/recommendations', (c) =>
 )
 app.post('/api/onboarding/complete', (c) => c.json({ success: true, redirectTo: '/dashboard' }))
 
+mountGoogleSheetRoutes(app, requireAuth)
+
 app.notFound((c) => c.json({ error: 'Route not found' }, 404))
 
-export default app
+export default {
+  fetch: app.fetch.bind(app),
+  scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(syncAllLinkedSheets(env))
+  },
+}

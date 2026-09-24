@@ -64,6 +64,48 @@ export function getDashboardOverview(verticalId?: string) {
   return DASHBOARD_MOCKS[id]
 }
 
+const TOTAL_ASSET_STAT_LABELS = new Set([
+  'Products / Assets',
+  'Ingredients / Inventory',
+  'Active Listings',
+  'Managed Assets',
+])
+
+const LOW_STOCK_STAT_LABELS = new Set([
+  'Low Stock Items',
+  'Low Stock Ingredients',
+  'Low Stock Listings',
+])
+
+export function formatInventoryValue(amount: number): string {
+  const cents = Math.round(amount * 100) / 100
+  const whole = Number.isInteger(cents)
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: whole ? 0 : 2,
+  }).format(cents)
+}
+
+export function applyLiveAssetStats<T extends { label: string; value: string; href?: string }>(
+  stats: T[],
+  counts: { total: number; lowStock: number; inventoryValue?: number }
+): T[] {
+  return stats.map((stat) => {
+    if (TOTAL_ASSET_STAT_LABELS.has(stat.label)) {
+      return { ...stat, value: String(counts.total), href: '/assets' }
+    }
+    if (LOW_STOCK_STAT_LABELS.has(stat.label)) {
+      return { ...stat, value: String(counts.lowStock), href: '/assets?status=LOW' }
+    }
+    if (stat.label === 'Inventory Value' && counts.inventoryValue !== undefined) {
+      return { ...stat, value: formatInventoryValue(counts.inventoryValue) }
+    }
+    return stat
+  })
+}
+
 export const ANALYTICS_OVERVIEW = {
   aiAccuracy: 94.2,
   avgResponseTime: 2.3,
