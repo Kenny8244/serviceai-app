@@ -26,7 +26,9 @@ export function ImportProgressPanel() {
           <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Import</p>
           {running ? (
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {snapshot.label ?? `${snapshot.current} of ${snapshot.total}`}
+              {snapshot.total > 0
+                ? `${snapshot.current} of ${snapshot.total}`
+                : (snapshot.label ?? 'Importing…')}
             </p>
           ) : (
             <>

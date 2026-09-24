@@ -162,6 +162,12 @@ export function startAssetImport(rows: MappedAssetRow[], skipped = 0) {
   })()
 }
 
+export function reportImportProgress(current: number, total: number) {
+  if (snapshot.status !== 'running') return
+  snapshot = { ...snapshot, current, total }
+  emit()
+}
+
 export function startBackgroundImport(input: {
   label: string
   run: () => Promise<{ summary: string; error?: string | null }>

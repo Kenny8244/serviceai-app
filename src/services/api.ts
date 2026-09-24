@@ -196,6 +196,9 @@ export type GoogleSheetStatus = {
   lastSyncAt: string | null
   lastError: string | null
   lastResult: GoogleSheetSyncCounts | null
+  syncDone: boolean
+  syncProcessed: number
+  syncTotal: number
 }
 
 export type GoogleSpreadsheetOption = {
@@ -1084,10 +1087,11 @@ class ApiService {
     return this.handleResponse(response)
   }
 
-  async syncGoogleSheet(): Promise<GoogleSheetStatus> {
+  async syncGoogleSheet(options?: { continue?: boolean }): Promise<GoogleSheetStatus> {
     const response = await fetch(`${API_BASE_URL}/integrations/google-sheets/sync`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
+      headers: this.getAuthHeaders(true),
+      body: JSON.stringify({ continue: options?.continue === true }),
     })
     return this.handleResponse(response)
   }

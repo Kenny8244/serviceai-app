@@ -81,7 +81,7 @@ app.use('*', async (c, next) => {
 })
 
 app.use('*', async (c, next) => {
-  const origins = [c.env.FRONTEND_URL, 'http://localhost:5173', 'https://serviceai-app.pages.dev']
+  const origins = [c.env.FRONTEND_URL, 'http://localhost:5173', 'https://serviceai-app-1zv.pages.dev', 'https://serviceai-app.pages.dev']
   return cors({
     origin: (origin) => (origins.includes(origin) ? origin : origins[0]),
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

@@ -21,7 +21,7 @@ import {
 import { syncSheetLink } from './sheetSync'
 import type { Env, JwtPayload, Variables } from '../types'
 
-const EXTRA_ORIGINS = ['http://localhost:5173', 'https://serviceai-app.pages.dev']
+const EXTRA_ORIGINS = ['http://localhost:5173', 'https://serviceai-app-1zv.pages.dev', 'https://serviceai-app.pages.dev']
 
 function returnOrigin(env: Env, origin: string | undefined): string {
   if (origin && (origin === env.FRONTEND_URL || EXTRA_ORIGINS.includes(origin))) return origin
@@ -110,6 +110,7 @@ export function mountGoogleSheetRoutes(
         lastSyncAt: existing?.lastSyncAt ?? null,
         lastError: null,
         lastResult: existing?.lastResult ?? null,
+        syncCursor: existing?.syncCursor ?? null,
       }
       await saveSheetLink(c.env.DEMO_KV, link)
       return c.redirect(`${returnTo}/assets?sheets=pick`)
@@ -172,7 +173,7 @@ export function mountGoogleSheetRoutes(
         lastError: null,
       }
       await saveSheetLink(c.env.DEMO_KV, linked)
-      const synced = await syncSheetLink(c.env, linked)
+      const synced = await syncSheetLink(c.env, linked, 'reset')
       return c.json({
         configured: true,
         ...publicSheetLink(synced),
@@ -188,7 +189,8 @@ export function mountGoogleSheetRoutes(
       if (!link.spreadsheetId || !link.sheetName) {
         return c.json({ error: 'Choose a spreadsheet before syncing.' }, 400)
       }
-      const synced = await syncSheetLink(c.env, link)
+      const body = await c.req.json<{ continue?: boolean }>().catch(() => ({ continue: false }))
+      const synced = await syncSheetLink(c.env, link, body.continue ? 'continue' : 'reset')
       return c.json({
         configured: googleSheetsConfigured(c.env),
         ...publicSheetLink(synced),

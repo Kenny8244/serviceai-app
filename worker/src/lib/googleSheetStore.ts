@@ -8,6 +8,14 @@ export type SheetSyncCounts = {
   skipped: number
 }
 
+export type SheetSyncCursor = {
+  offset: number
+  total: number
+  created: number
+  updated: number
+  skipped: number
+}
+
 export type SheetLink = {
   workspaceId: string
   userId: string
@@ -19,6 +27,7 @@ export type SheetLink = {
   lastSyncAt: string | null
   lastError: string | null
   lastResult: SheetSyncCounts | null
+  syncCursor: SheetSyncCursor | null
 }
 
 export type OAuthState = {
@@ -36,6 +45,11 @@ function stateKey(state: string): string {
   return `gsheet:oauth:${state}`
 }
 
+function finishedRows(result: SheetSyncCounts | null): number {
+  if (!result) return 0
+  return result.created + result.updated
+}
+
 export function publicSheetLink(link: SheetLink | null) {
   if (!link) {
     return {
@@ -46,9 +60,13 @@ export function publicSheetLink(link: SheetLink | null) {
       lastSyncAt: null,
       lastError: null,
       lastResult: null,
+      syncDone: true,
+      syncProcessed: 0,
+      syncTotal: 0,
     }
   }
 
+  const processed = link.syncCursor?.offset ?? finishedRows(link.lastResult)
   return {
     connected: true,
     spreadsheetId: link.spreadsheetId,
@@ -57,6 +75,9 @@ export function publicSheetLink(link: SheetLink | null) {
     lastSyncAt: link.lastSyncAt,
     lastError: link.lastError,
     lastResult: link.lastResult,
+    syncDone: !link.syncCursor,
+    syncProcessed: processed,
+    syncTotal: link.syncCursor?.total ?? processed,
   }
 }
 

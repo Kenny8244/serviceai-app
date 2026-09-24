@@ -1,7 +1,7 @@
-import { mapCsvRowsToAssets } from '../../../src/lib/parseCsv'
+import { mapCsvRowsToAssets, type MappedAssetRow } from '../../../src/lib/parseCsv'
 import { findSheetAssetMatch, type SheetAssetRef } from '../../../src/lib/sheetMatch'
 import type { Env } from '../types'
-import { createWorkspaceAsset, listWorkspaceAssets, updateWorkspaceAsset, type CreateAssetInput } from './assets'
+import { listWorkspaceAssets, withSheetWriteContext, type CreateAssetInput } from './assets'
 import { GoogleSheetsError, readSheetTable, refreshAccessToken } from './googleSheetsApi'
 import {
   getSheetLink,
@@ -9,19 +9,17 @@ import {
   saveSheetLink,
   type SheetLink,
   type SheetSyncCounts,
+  type SheetSyncCursor,
 } from './googleSheetStore'
 
-function toAssetInput(row: {
-  name: string
-  sku?: string
-  category?: string
-  quantity?: number
-  minQuantity?: number
-  unitCost?: number | null
-  supplier?: string
-  location?: string
-  description?: string
-}): CreateAssetInput {
+export const SHEET_SYNC_BATCH_SIZE = 8
+
+type PoolAsset = SheetAssetRef & {
+  objectTypeId: string
+  customFields: Record<string, unknown>
+}
+
+function toAssetInput(row: MappedAssetRow): CreateAssetInput {
   return {
     name: row.name,
     sku: row.sku ?? null,
@@ -35,47 +33,51 @@ function toAssetInput(row: {
   }
 }
 
-export async function upsertMappedRows(
-  env: Env,
-  userId: string,
-  workspaceId: string,
-  rows: ReturnType<typeof mapCsvRowsToAssets>['ready'],
-  skipped: number
-): Promise<SheetSyncCounts> {
-  const existing = await listWorkspaceAssets(env, userId, workspaceId)
-  const pool: SheetAssetRef[] = existing.map((asset) => ({
-    id: asset.id,
-    name: asset.name,
-    sku: asset.sku,
-  }))
+export function sheetBatchEnd(total: number, offset: number, batchSize = SHEET_SYNC_BATCH_SIZE): number {
+  return Math.min(total, offset + batchSize)
+}
 
+export async function applyMappedBatch(
+  pool: PoolAsset[],
+  rows: MappedAssetRow[],
+  write: (row: MappedAssetRow, match: PoolAsset | null) => Promise<{ id: string; name: string; sku: string | null }>
+): Promise<SheetSyncCounts> {
   let created = 0
   let updated = 0
-
   for (const row of rows) {
     const match = findSheetAssetMatch(pool, row)
-    const input = toAssetInput(row)
+    const written = await write(row, match)
     if (match) {
-      await updateWorkspaceAsset(env, userId, match.id, input, workspaceId)
-      match.name = row.name
-      match.sku = row.sku ?? match.sku
+      match.name = written.name
+      match.sku = written.sku ?? match.sku
       updated += 1
     } else {
-      const createdAsset = await createWorkspaceAsset(env, userId, input, workspaceId)
-      pool.push({ id: createdAsset.id, name: createdAsset.name, sku: createdAsset.sku })
+      pool.push({
+        id: written.id,
+        name: written.name,
+        sku: written.sku,
+        objectTypeId: '',
+        customFields: {},
+      })
       created += 1
     }
   }
-
-  return { created, updated, skipped }
+  return { created, updated, skipped: 0 }
 }
 
-export async function syncSheetLink(env: Env, link: SheetLink): Promise<SheetLink> {
+export async function syncSheetLink(
+  env: Env,
+  link: SheetLink,
+  mode: 'reset' | 'continue' = 'reset'
+): Promise<SheetLink> {
   if (!link.spreadsheetId || !link.sheetName) {
     return link
   }
+  if (mode === 'continue' && !link.syncCursor) {
+    return link
+  }
 
-  const next: SheetLink = { ...link }
+  const next: SheetLink = { ...link, syncCursor: link.syncCursor ?? null }
   try {
     const accessToken = await refreshAccessToken(env, link.refreshToken)
     const table = await readSheetTable(accessToken, link.spreadsheetId, link.sheetName)
@@ -83,15 +85,44 @@ export async function syncSheetLink(env: Env, link: SheetLink): Promise<SheetLin
       next.lastSyncAt = new Date().toISOString()
       next.lastError = 'The sheet is empty.'
       next.lastResult = { created: 0, updated: 0, skipped: 0 }
+      next.syncCursor = null
       await saveSheetLink(env.DEMO_KV, next)
       return next
     }
 
     const mapped = mapCsvRowsToAssets(table)
-    const result = await upsertMappedRows(env, link.userId, link.workspaceId, mapped.ready, mapped.skipped)
+    const cursor = mode === 'continue' && next.syncCursor ? next.syncCursor : emptyCursor(mapped.ready.length, mapped.skipped)
+    const end = sheetBatchEnd(mapped.ready.length, cursor.offset)
+    const slice = mapped.ready.slice(cursor.offset, end)
+    const existing = await listWorkspaceAssets(env, link.userId, link.workspaceId)
+    const pool: PoolAsset[] = existing.map((asset) => ({
+      id: asset.id,
+      name: asset.name,
+      sku: asset.sku,
+      objectTypeId: asset.object_type_id,
+      customFields: asset.custom_fields ?? {},
+    }))
+
+    let counts: SheetSyncCounts = { created: 0, updated: 0, skipped: 0 }
+    await withSheetWriteContext(env, link.userId, link.workspaceId, async (write) => {
+      counts = await applyMappedBatch(pool, slice, (row, match) =>
+        write(
+          toAssetInput(row),
+          match ? { id: match.id, objectTypeId: match.objectTypeId, customFields: match.customFields } : null
+        )
+      )
+    })
+
+    const created = cursor.created + counts.created
+    const updated = cursor.updated + counts.updated
+    const finished = end >= mapped.ready.length
+    const result: SheetSyncCounts = { created, updated, skipped: cursor.skipped }
     next.lastSyncAt = new Date().toISOString()
     next.lastError = null
     next.lastResult = result
+    next.syncCursor = finished
+      ? null
+      : { offset: end, total: mapped.ready.length, created, updated, skipped: cursor.skipped }
   } catch (error) {
     next.lastSyncAt = new Date().toISOString()
     next.lastError =
@@ -104,13 +135,17 @@ export async function syncSheetLink(env: Env, link: SheetLink): Promise<SheetLin
   return next
 }
 
+function emptyCursor(total: number, skipped: number): SheetSyncCursor {
+  return { offset: 0, total, created: 0, updated: 0, skipped }
+}
+
 export async function syncAllLinkedSheets(env: Env): Promise<void> {
   const ids = await listLinkedWorkspaceIds(env.DEMO_KV)
   for (const workspaceId of ids) {
     const link = await getSheetLink(env.DEMO_KV, workspaceId)
     if (!link?.spreadsheetId || !link.sheetName) continue
     try {
-      await syncSheetLink(env, link)
+      await syncSheetLink(env, link, link.syncCursor ? 'continue' : 'reset')
     } catch (error) {
       console.error('Google Sheets sync failed:', workspaceId, error)
     }

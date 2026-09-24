@@ -7,11 +7,9 @@ compatibility_flags = ["nodejs_compat"]
 workers_dev = false
 
 [vars]
-FRONTEND_URL = "https://serviceai-app.pages.dev"
-# Real values live in worker/.dev.vars (local) or Wrangler secrets (production).
-GOOGLE_CLIENT_ID = ""
-GOOGLE_CLIENT_SECRET = ""
-GOOGLE_REDIRECT_URI = ""
+FRONTEND_URL = "https://serviceai-app-1zv.pages.dev"
+# Google OAuth values are not declared here. Empty [vars] replace Wrangler secrets on deploy.
+# Local: worker/.dev.vars. Production: wrangler secret put.
 
 [dev]
 ip = "127.0.0.1"

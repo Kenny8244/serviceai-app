@@ -563,6 +563,87 @@ export async function updateWorkspaceAsset(
   return mapObjectToAsset(data as ObjectRow, userId)
 }
 
+export type SheetRowMatch = {
+  id: string
+  objectTypeId: string
+  customFields?: Record<string, unknown> | null
+}
+
+/** One workspace and type lookup, then one write per row inside `run`. */
+export async function withSheetWriteContext(
+  env: Env,
+  userId: string,
+  workspaceId: string,
+  run: (
+    write: (input: CreateAssetInput, match: SheetRowMatch | null) => Promise<{ id: string; name: string; sku: string | null }>
+  ) => Promise<void>
+): Promise<void> {
+  const admin = requireAdmin(env)
+  const resolvedWorkspaceId = await resolvePreferredWorkspaceId(admin, userId, workspaceId)
+  if (!resolvedWorkspaceId) {
+    throw new AssetsHttpError('No workspace found for this account.', 400)
+  }
+  const types = await listWorkspaceObjectTypes(env, userId, resolvedWorkspaceId)
+  const fallbackTypeId = defaultObjectTypeId(types)
+  if (!fallbackTypeId) throw new AssetsHttpError('No object types available.', 400)
+
+  const write = async (input: CreateAssetInput, match: SheetRowMatch | null) => {
+    const name = input.name.trim()
+    if (!name) throw new AssetsHttpError('Name is required.', 400)
+    const typeId = match?.objectTypeId || fallbackTypeId
+    const type = types.find((item) => item.id === typeId) ?? types.find((item) => item.id === fallbackTypeId)
+    const fields = customFieldsFromInput(input, type?.attributes ?? [], match?.customFields)
+    if (type) assertRequiredAttributes(type.attributes, fields)
+
+    if (!match) {
+      const { data, error } = await admin
+        .from('objects')
+        .insert({
+          object_type_id: type?.id ?? fallbackTypeId,
+          workspace_id: resolvedWorkspaceId,
+          name,
+          status: 'active',
+          custom_fields: fields,
+          is_deleted: false,
+          created_by: userId,
+          updated_by: userId,
+        })
+        .select('object_id')
+        .single()
+      if (error || !data) {
+        console.error('Failed to create asset:', error?.message)
+        throw new AssetsHttpError('Could not create asset.', 500)
+      }
+      return { id: data.object_id as string, name, sku: input.sku ?? null }
+    }
+
+    const { error } = await admin
+      .from('objects')
+      .update({
+        name,
+        object_type_id: type?.id ?? typeId,
+        custom_fields: fields,
+        updated_by: userId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('object_id', match.id)
+      .eq('workspace_id', resolvedWorkspaceId)
+      .eq('is_deleted', false)
+    if (error) {
+      console.error('Failed to update asset:', error.message)
+      throw new AssetsHttpError('Could not update asset.', 500)
+    }
+    const previousSku = match.customFields?.sku
+    return {
+      id: match.id,
+      name,
+      sku: input.sku ?? (typeof previousSku === 'string' ? previousSku : null),
+    }
+  }
+
+  await run(write)
+}
+
 /**
  * Archive relationship rules (SCRUM-40):
  * - Soft-archive the object (`is_deleted` / `deleted_at` / `status: inactive`) so it

@@ -18,8 +18,8 @@
     "test:e2e": "playwright test",
     "test:all": "vitest run && playwright test",
     "preview": "vite preview",
-    "deploy": "npm run build && wrangler pages deploy dist --project-name=serviceai-app",
-    "deploy:preview": "wrangler pages deploy dist --project-name=serviceai-app --branch=preview",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name=serviceai-app-1zv",
+    "deploy:preview": "wrangler pages deploy dist --project-name=serviceai-app-1zv --branch=preview",
     "deploy:api": "npm run deploy --prefix worker",
     "deploy:all": "npm run deploy:api && npm run deploy"
   },

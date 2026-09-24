@@ -4,7 +4,7 @@ import { Check, RefreshCw, Search, Sheet, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { getAssetImportSnapshot, startBackgroundImport, subscribeAssetImport } from '@/lib/assetImportJob'
+import { getAssetImportSnapshot, reportImportProgress, startBackgroundImport, subscribeAssetImport } from '@/lib/assetImportJob'
 import { toUserMessage } from '@/lib/userFacingError'
 import {
   apiService,
@@ -139,42 +139,48 @@ export function GoogleSheetSyncPanel({ onImported }: GoogleSheetSyncPanelProps) 
     }
   }
 
-  const handleLink = () => {
-    const spreadsheet = spreadsheets.find((file) => file.id === spreadsheetId)
-    if (!spreadsheet || !sheetName) return
+  const runSheetBatches = (
+    label: string,
+    first: () => Promise<GoogleSheetStatus>
+  ) => {
     const started = startBackgroundImport({
-      label: 'Importing from Google Sheet…',
+      label,
       run: async () => {
-        const next = await apiService.linkGoogleSheet({
-          spreadsheetId: spreadsheet.id,
-          spreadsheetName: spreadsheet.name,
-          sheetName,
-        })
+        let next = await first()
         setStatus(next)
+        reportImportProgress(next.syncProcessed, next.syncTotal)
         onImported()
+        while (!next.syncDone && !next.lastError) {
+          next = await apiService.syncGoogleSheet({ continue: true })
+          setStatus(next)
+          reportImportProgress(next.syncProcessed, next.syncTotal)
+          onImported()
+        }
         return { summary: sheetSummary(next), error: next.lastError }
       },
     })
-    if (!started) {
-      setError('An import is already running.')
-      return
-    }
+    if (!started) setError('An import is already running.')
+    return started
+  }
+
+  const handleLink = () => {
+    const spreadsheet = spreadsheets.find((file) => file.id === spreadsheetId)
+    if (!spreadsheet || !sheetName) return
+    const started = runSheetBatches('Importing from Google Sheet…', () =>
+      apiService.linkGoogleSheet({
+        spreadsheetId: spreadsheet.id,
+        spreadsheetName: spreadsheet.name,
+        sheetName,
+      })
+    )
+    if (!started) return
     setError(null)
     setPickerOpen(false)
     clearSheetsQuery()
   }
 
   const handleSync = () => {
-    const started = startBackgroundImport({
-      label: 'Syncing Google Sheet…',
-      run: async () => {
-        const next = await apiService.syncGoogleSheet()
-        setStatus(next)
-        onImported()
-        return { summary: sheetSummary(next), error: next.lastError }
-      },
-    })
-    if (!started) setError('An import is already running.')
+    if (!runSheetBatches('Syncing Google Sheet…', () => apiService.syncGoogleSheet())) return
   }
 
   const closePicker = () => {

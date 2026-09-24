@@ -123,16 +123,22 @@ function mapAccount(profile: ProfileRow, tenant: TenantRow | null): AuthAccount 
   }
 }
 
+function throwIfWorkspaceLookupFailed(error: { message: string } | null): void {
+  if (!error) return
+  throw new Error(error.message)
+}
+
 export async function getWorkspaceIdForProfile(
   client: SupabaseClient,
   profileId: string
 ): Promise<string | null> {
-  const { data: role } = await client
+  const { data: role, error } = await client
     .from('user_workspace_roles')
     .select('workspace_id')
     .eq('profile_id', profileId)
     .limit(1)
     .maybeSingle()
+  throwIfWorkspaceLookupFailed(error)
   return role?.workspace_id ?? null
 }
 
@@ -147,12 +153,13 @@ export async function resolvePreferredWorkspaceId(
   const preferred =
     typeof preferredWorkspaceId === 'string' ? preferredWorkspaceId.trim() : ''
   if (preferred) {
-    const { data: role } = await client
+    const { data: role, error } = await client
       .from('user_workspace_roles')
       .select('workspace_id')
       .eq('profile_id', profileId)
       .eq('workspace_id', preferred)
       .maybeSingle()
+    throwIfWorkspaceLookupFailed(error)
     if (role?.workspace_id) return role.workspace_id as string
     // Spoofed or stale JWT workspaceId: fall through to first membership only.
   }

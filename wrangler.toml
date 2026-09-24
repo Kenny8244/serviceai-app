@@ -1,5 +1,5 @@
 # Cloudflare Pages - Vite SPA + Functions proxy to the API Worker
-name = "serviceai-app"
+name = "serviceai-app-1zv"
 compatibility_date = "2026-08-25"
 pages_build_output_dir = "dist"
 

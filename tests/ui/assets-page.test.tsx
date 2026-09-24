@@ -150,6 +150,9 @@ function mockGoogleSheets() {
     lastSyncAt: null,
     lastError: null,
     lastResult: null,
+    syncDone: true,
+    syncProcessed: 0,
+    syncTotal: 0,
   })
 }
 
